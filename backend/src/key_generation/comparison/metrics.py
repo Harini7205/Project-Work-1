@@ -32,7 +32,8 @@ def get_equivalent_security_bits(size_or_curve, algo):
     Returns the NIST-recommended symmetric security bit level for a given
     key size/curve, based on common industry standards.
     """
-    # NIST SP 800-57 Part 1 Rev 5 (as of 2020)
+    # NIST Standard guidelines https://nvlpubs.nist.gov/nistpubs/specialpublications/nist.sp.800-57pt1r5.pdf Pg: 54, 55
+    # And for non-standard curves https://datatracker.ietf.org/doc/html/rfc8031 Topic 4
     if algo == "RSA":
         if size_or_curve >= 7680: return 192
         if size_or_curve >= 3072: return 128

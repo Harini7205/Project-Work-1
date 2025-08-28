@@ -32,10 +32,3 @@ def generate_ecc_key_pair(curve_name: str = "SECP256R1"):
         private_key = ec.generate_private_key(curve)
         public_key = private_key.public_key()
     return private_key, public_key
-
-def get_ecc_key_size(key_pair):
-    """Returns the size of the ECC key pair in bytes."""
-    private_key, public_key = key_pair
-    # ECC key size is the size of the curve's public key point in bytes.
-    # The private key is a scalar of the same bit length as the curve.
-    return public_key.key_size // 8

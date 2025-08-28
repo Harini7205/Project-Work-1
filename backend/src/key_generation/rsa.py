@@ -17,10 +17,3 @@ def generate_rsa_key_pair(key_size: int = 2048):
     )
     public_key = private_key.public_key()
     return private_key, public_key
-
-def get_rsa_key_size(key_pair):
-    """Returns the size of the RSA key pair in bytes."""
-    private_key, public_key = key_pair
-    # The RSA key size is often expressed as the modulus size in bits.
-    # We can get the size of the private key, which is the same as the public key's modulus.
-    return private_key.key_size // 8

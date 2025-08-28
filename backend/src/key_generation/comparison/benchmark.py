@@ -9,8 +9,6 @@ from ..ecc import generate_ecc_key_pair
 # Import all necessary functions from the metrics.py file
 from .metrics import get_rsa_key_size_bytes, get_ecc_metrics, get_equivalent_security_bits
 
-from cryptography.hazmat.primitives import serialization
-
 def run_key_generation_comparison(rsa_sizes, ecc_curves, num_runs=100):
     """
     Compares RSA and ECC key generation across different key sizes/curves.
@@ -31,27 +29,9 @@ def run_key_generation_comparison(rsa_sizes, ecc_curves, num_runs=100):
             priv, pub = generate_rsa_key_pair(key_size=size)
             end_time = time.time()
             total_time += (end_time - start_time)
-            # Correctly call the RSA metric function
             key_size_bytes = get_rsa_key_size_bytes((priv, pub))
         
         avg_time = total_time / num_runs
-        
-        pem_public = pub.public_bytes(
-                encoding=serialization.Encoding.PEM,
-                format=serialization.PublicFormat.SubjectPublicKeyInfo
-            )
-        print("Public Key:")
-        print(pem_public.decode('utf-8'))
-            
-        # The private key serialization method is more complex
-        if hasattr(priv, 'private_bytes'):
-            pem_private = priv.private_bytes(
-                encoding=serialization.Encoding.PEM,
-                format=serialization.PrivateFormat.PKCS8,
-                encryption_algorithm=serialization.NoEncryption()
-            )
-        print("Private Key:")
-        print(pem_private.decode('utf-8'))
 
         results.append({
             "Algorithm": "RSA",
@@ -71,27 +51,9 @@ def run_key_generation_comparison(rsa_sizes, ecc_curves, num_runs=100):
             priv, pub = generate_ecc_key_pair(curve_name=curve)
             end_time = time.time()
             total_time += (end_time - start_time)
-            # Correctly call the ECC metric function
             curve_size_bits, key_size_bytes = get_ecc_metrics((priv, pub), curve)
             
         avg_time = total_time / num_runs
-
-        pem_public = pub.public_bytes(
-                encoding=serialization.Encoding.PEM,
-                format=serialization.PublicFormat.SubjectPublicKeyInfo
-            )
-        print("Public Key:")
-        print(pem_public.decode('utf-8'))
-            
-        # The private key serialization method is more complex
-        if hasattr(priv, 'private_bytes'):
-            pem_private = priv.private_bytes(
-                encoding=serialization.Encoding.PEM,
-                format=serialization.PrivateFormat.PKCS8,
-                encryption_algorithm=serialization.NoEncryption()
-            )
-        print("Private Key:")
-        print(pem_private.decode('utf-8'))
         
         results.append({
             "Algorithm": f"{curve} ECC",
