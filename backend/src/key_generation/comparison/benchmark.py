@@ -3,8 +3,8 @@ import csv
 import os
 
 # Relative imports for the key generation algorithms
-from ..rsa import generate_rsa_key_pair
-from ..ecc import generate_ecc_key_pair
+from .rsa import generate_rsa_key_pair
+from .ecc import generate_ecc_key_pair
 
 # Import all necessary functions from the metrics.py file
 from .metrics import get_rsa_key_size_bytes, get_ecc_metrics, get_equivalent_security_bits
