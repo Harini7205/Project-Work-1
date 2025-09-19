@@ -1,0 +1,5 @@
+coincurve
+pycryptodome
+pyzipper
+requests
+eth-keys 
