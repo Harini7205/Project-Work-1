@@ -1,3 +1,12 @@
 cffi==1.17.1
 cryptography==45.0.6
 pycparser==2.22
+pyzipper
+requests
+pycryptodome
+coincurve
+web3
+eth-account
+python-dotenv
+numpy
+scipy

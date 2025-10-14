@@ -1,0 +1,4 @@
+Algorithm,Original Size (bytes),Encrypted Size (bytes),Encryption Time (s),Decryption Time (s),Cipher Entropy (bits),Byte Difference,Chi-Square p-value
+AES-256-CBC,2455504,2455536,0.0082,0.0257,7.9999,2445903.3,0.5988
+AES-256-GCM,2455504,2455532,0.006,0.0183,7.9999,2445917.1,0.9771
+RC4,2455504,2455504,0.0087,0.0224,7.9999,2445922.0,0.4506
