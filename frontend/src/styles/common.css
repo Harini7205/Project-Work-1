@@ -1,0 +1,18 @@
+.login-container {
+  text-align: center;
+  padding: 40px;
+}
+
+.role-box {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.role-box > button {
+  padding: 12px 20px;
+  background: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 8px;
+}

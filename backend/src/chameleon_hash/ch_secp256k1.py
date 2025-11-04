@@ -30,12 +30,11 @@ def _rand_scalar() -> int:
         if 0 < x < SECP256K1_N:
             return x
 
-def encode_message(proof_bytes: bytes, cid_utf8: str, consent_active: bool, identity_bytes: bytes) -> bytes:
+def encode_message(cid_utf8: str, consent_active: bool, identity_bytes: bytes) -> bytes:
     tag = b"ZKID_CH_v1"
-    proof_h = _keccak256(proof_bytes)
     cid_h = _keccak256(cid_utf8.encode("utf-8"))
     consent = b"\x01" if consent_active else b"\x00"
-    return tag + proof_h + cid_h + consent + identity_bytes
+    return tag + cid_h + consent + identity_bytes
 
 def ch_hash(m_bytes: bytes, r: int, pk_pubbytes: bytes):
     """

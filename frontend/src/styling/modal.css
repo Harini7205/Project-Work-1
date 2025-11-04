@@ -1,0 +1,33 @@
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.35);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.modal-box {
+  width: 420px;
+  background: white;
+  border-radius: 14px;
+  padding: 28px;
+  box-shadow: 0 12px 35px rgba(0,0,0,0.18);
+  text-align: center;
+  animation: fadeUp 0.3s ease;
+}
+
+.modal-close {
+  margin-top: 18px;
+  padding: 10px 14px;
+  border: none;
+  border-radius: 8px;
+  background: #444;
+  color: white;
+  cursor: pointer;
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}

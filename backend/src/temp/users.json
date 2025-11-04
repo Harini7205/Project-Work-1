@@ -1,0 +1,20 @@
+{
+    "abc": {
+        "eth_address": "0x014b132c3E5561846cE19FC0b8099cF0aBEfc7a0",
+        "eth_private_key": "c4d9dda35830ec1814e1034f3bde3dee33ad30ee15b0b21158e87d66c9f681c8",
+        "ecc_private_key": "462f1488503173178469f67c99c137d7240cdf123c2002718a9a4328eb57df6d",
+        "ecc_public_key": "02bce3eaa1ad4b21e7685df2eb24f29d8a3133bb4aa872d3ce7b8261f5c95a6d32"
+    },
+    "string": {
+        "eth_address": "0x994699f95247f506Dd31DE34Cb89b20F6E4FC3Bf",
+        "eth_private_key": "c7d62428f572fd732109dd1fb6eaad59a2d48b835cd07a47360749ba2125972f",
+        "ecc_private_key": "148eafa97df5b4a6246da22c248072c73f825845faf4595f6d24cf63893fb774",
+        "ecc_public_key": "024a25d7141df8a3793902b8dfbdaa658a73705ba2d6f27e08fb2cfc8611d172f7"
+    },
+    "0x5a41aab9c37c5186210715b89c7f5aee77ce7289": {
+        "eth_address": "0xe02d44881320B7BA628f63f864f89dA2F2C0b4e3",
+        "eth_private_key": "6071e8c73be96fcca31b4e374a9aff1474b7a1fed7cd478f820f6208c4e26475",
+        "ecc_private_key": "a3d41d00d5442f1dfd6fb6667c5368e6e056a0c1a00ff38d755892b332a728c2",
+        "ecc_public_key": "0399e856db163b439526fd3565e8fa7b870da95de3303a8d8f4c9e3de7597e8417"
+    }
+}

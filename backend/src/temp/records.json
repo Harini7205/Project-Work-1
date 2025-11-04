@@ -1,0 +1,12 @@
+{
+    "abc": {
+        "cid": "QmP1SvwYjCRGsorzr4XFvYuBzhGB4ffiD7ggc6nbX26A8Z",
+        "r": "0x59750be19356058afd7eb5191b42fc11d1543b0ca83e278e427962420ba00d8b",
+        "chameleon_hash": "ff42a3a4dea857be7184b289d196f583faadfc3279ec65c215a313b1bdc5b784"
+    },
+    "0x5a41aab9c37c5186210715b89c7f5aee77ce7289": {
+        "cid": "QmTGyBBeVE6N6PNXNGb5SegKiaY6gqthD1vSbHXoWMZW6e",
+        "r": "0x738e839144447022fed9f4a628e3b7c2afc8ee5971f7501c35866c0227aadf7",
+        "chameleon_hash": "7eec2e5a1a2794f4ca07359213220b30449db15e39b330804e0557ffea44ae96"
+    }
+}

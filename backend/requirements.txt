@@ -10,3 +10,6 @@ eth-account
 python-dotenv
 numpy
 scipy
+fastapi
+uvicorn
+python-multipart

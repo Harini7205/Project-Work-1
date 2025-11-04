@@ -5,7 +5,7 @@ from pathlib import Path
 
 from .aes_gcm import encrypt_pdf, decrypt_pdf  # Assuming this is the AES-GCM module
 
-OUT_FILE = Path("backend/src/ipfs/temporary")
+OUT_FILE = Path("ipfs/temporary")
 os.makedirs(OUT_FILE, exist_ok=True)
 
 def upload_to_ipfs(input_file: str, ipfs_api="http://127.0.0.1:5001/api/v0/add") -> str:

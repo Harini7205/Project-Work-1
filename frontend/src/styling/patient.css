@@ -1,0 +1,120 @@
+/* Page background */
+body {
+  margin: 0;
+  padding: 0;
+  background: #f3f4f6;
+  font-family: "Inter", sans-serif;
+}
+
+/* Main container */
+.patient-container {
+  padding: 2rem;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Title */
+.patient-title {
+  font-size: 2rem;
+  font-weight: 700;
+  margin-bottom: 1.5rem;
+  color: #1f2937;
+}
+
+/* Buttons container */
+.patient-actions {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+/* Primary button */
+.btn-primary {
+  background: #2563eb;
+  color: #fff;
+  padding: 12px 22px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+  transition: 0.25s;
+}
+
+.btn-primary:hover {
+  background: #1d4ed8;
+  transform: translateY(-2px);
+}
+
+/* Secondary button */
+.btn-secondary {
+  background: #6b7280;
+  color: #fff;
+  padding: 12px 22px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+  transition: 0.25s;
+}
+
+.btn-secondary:hover {
+  background: #4b5563;
+  transform: translateY(-2px);
+}
+
+/* Card box style */
+.card-box {
+  margin-top: 2rem;
+  padding: 1.5rem;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.08);
+  width: 100%;
+  max-width: 450px;
+}
+
+/* Upload input */
+.file-input {
+  width: 100%;
+  padding: 8px;
+  margin-bottom: 1.25rem;
+}
+
+/* Requests list */
+.request-row {
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 10px;
+  margin: 6px 0;
+  display: flex;
+  justify-content: space-between;
+}
+
+.request-row span {
+  font-weight: 500;
+}
+
+/* Empty request text */
+.no-requests {
+  text-align: center;
+  margin-top: 1rem;
+  color: #4b5563;
+}
+
+/* Smooth fade animation helper */
+.fade-in {
+  animation: fadeIn 0.35s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0px);
+  }
+}
