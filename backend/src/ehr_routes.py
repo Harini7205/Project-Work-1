@@ -1,68 +1,34 @@
 from fastapi import APIRouter, UploadFile, Form, HTTPException
-from pathlib import Path
-from ipfs.ipfs_helper import upload_to_ipfs
+from ipfs.ipfs_helper import (
+    upload_to_ipfs_bytes as upload_to_ipfs,
+    download_from_ipfs_bytes as download_from_ipfs
+)
+from ipfs.aes_gcm import encrypt_bytes
 from chameleon_hash.ch_secp256k1 import encode_message, ch_hash, _rand_scalar, forge_r
-from blockchain_utils import register_record, redact_record
-from zkp.zkp_mock import generate_proof, verify_proof
+from zkp.zkp_mock import generate_proof
 from key_generation.ecc import generate_ecc_key_pair
-from eth_account import Account
+from fastapi.responses import StreamingResponse
 from web3 import Web3
-import json, os
+import json, io
+import time
+
+# blockchain helpers return tx_data
+from blockchain_utils import (
+    register_identity,
+    store_record,
+    update_record,
+    submit_access_request
+)
 
 router = APIRouter(prefix="/ehr", tags=["EHR"])
 
-# ------------------------------
-# Directories
-# ------------------------------
-TEMP_DIR = Path("temp")
-TEMP_DIR.mkdir(exist_ok=True)
-USER_DB = TEMP_DIR / "users.json"
-RECORD_DB = TEMP_DIR / "records.json"
 
-if not USER_DB.exists():
-    USER_DB.write_text("{}")
-if not RECORD_DB.exists():
-    RECORD_DB.write_text("{}")
-
-# ------------------------------
-# Blockchain config
-# ------------------------------
-HARDHAT_RPC = "http://127.0.0.1:7545"
-ABI_PATH = Path("./KeyRegistry.json")
-CONTRACT_ADDRESS = os.getenv("CONTRACT_ADDRESS")
-SENDER_ADDRESS = os.getenv("SENDER_ADDRESS")
-SENDER_PRIVATE_KEY = os.getenv("SENDER_PRIVATE_KEY")
-w3 = Web3(Web3.HTTPProvider(HARDHAT_RPC))
-
-
-def load_contract():
-    abi = json.loads(open(ABI_PATH).read())
-    return w3.eth.contract(address=w3.to_checksum_address(str(CONTRACT_ADDRESS)), abi=abi)
-
-# ------------------------------
-# 1️⃣ Register new Patient
-# ------------------------------
-@router.post("/register")
-async def register_patient(name: str = Form(...)):
-    """
-    Registers a new patient:
-    - Generates Ethereum wallet (address + private key)
-    - Generates ECC keypair
-    - Saves locally and registers ECC public key on blockchain
-    """
-    users = json.loads(USER_DB.read_text())
-
-    if name in users:
-        raise HTTPException(status_code=400, detail="User already exists")
-
-    # Generate Ethereum wallet
-    acct = Account.create()
-    eth_address = acct.address
-    eth_private_key = acct.key.hex()
-
-    # Generate ECC keypair
+###############################################################
+# ✅ 1) USER KEYPAIR GENERATION
+###############################################################
+@router.post("/generate-keys")
+async def generate_keys():
     sk, pk = generate_ecc_key_pair(save_to_disk=False)
-    ecc_private_hex = sk.private_numbers().private_value.to_bytes(32, "big").hex()
 
     from cryptography.hazmat.primitives import serialization
     ecc_public_bytes = pk.public_bytes(
@@ -70,196 +36,356 @@ async def register_patient(name: str = Form(...)):
         format=serialization.PublicFormat.CompressedPoint
     )
     ecc_public_hex = ecc_public_bytes.hex()
-
-    # Store locally
-    users[name] = {
-        "eth_address": eth_address,
-        "eth_private_key": eth_private_key,
-        "ecc_private_key": ecc_private_hex,
-        "ecc_public_key": ecc_public_hex
-    }
-    USER_DB.write_text(json.dumps(users, indent=4))
-
-    # Register ECC key on blockchain
-    contract = load_contract()
-    nonce = w3.eth.get_transaction_count(w3.to_checksum_address(str(SENDER_ADDRESS)))
-    try:
-        tx = contract.functions.registerKey(ecc_public_bytes).build_transaction({
-            "chainId": w3.eth.chain_id,
-            "from": str(SENDER_ADDRESS),
-            "nonce": nonce,
-            "gas": 3000000,
-            "gasPrice": w3.to_wei("1", "gwei")
-        })
-        signed_tx = w3.eth.account.sign_transaction(tx, private_key=SENDER_PRIVATE_KEY)
-        tx_hash = w3.eth.send_raw_transaction(signed_tx.raw_transaction)
-        w3.eth.wait_for_transaction_receipt(tx_hash)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Blockchain error: {e}")
+    ecc_private_hex = sk.private_numbers().private_value.to_bytes(32, "big").hex()
 
     return {
-        "message": f"Patient '{name}' registered successfully",
-        "eth_address": eth_address,
-        "tx_hash": tx_hash.hex(),
+        "private_key": ecc_private_hex,
+        "public_key": ecc_public_hex
     }
 
-# ------------------------------
-# 2️⃣ Upload and register EHR
-# ------------------------------
-@router.post("/upload")
-async def upload_ehr(file: UploadFile, patient_id: str = Form(...)):
-    users = json.loads(USER_DB.read_text())
-    records = json.loads(RECORD_DB.read_text())
 
-    if patient_id not in users:
-        raise HTTPException(status_code=401, detail="Unauthenticated: Register first")
+###############################################################
+# ✅ 2) REGISTER IDENTITY — return tx
+###############################################################
+@router.post("/register")
+async def register_identity_api(
+    public_key_hex: str = Form(...),
+    eth_address: str = Form(...),
+    name: str = Form(...)
+):
+    pk_bytes = bytes.fromhex(public_key_hex)
 
-    # Save uploaded file temporarily
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="No filename provided.")
-    temp_path = TEMP_DIR / file.filename
-    with open(temp_path, "wb") as f:
-        f.write(await file.read())
+    tx_data = register_identity(
+        eth_address=eth_address,
+        pubkey_bytes=pk_bytes, 
+        name=name
+    )
 
-    # Upload to IPFS
-    cid = upload_to_ipfs(str(temp_path))
+    return {
+        "message": "Identity prepared — sign via MetaMask",
+        "tx_data": tx_data
+    }
 
-    # Compute chameleon hash and r
-    identity = bytes.fromhex(users[patient_id]["ecc_public_key"])
-    msg = encode_message(cid, True, identity)
+
+###############################################################
+# ✅ 3) UPLOAD EHR → CH + ZKP → tx_data
+###############################################################
+
+###############################################################
+# ✅ (1) Encrypt EHR  — mock
+###############################################################
+@router.post("/encrypt")
+async def encrypt_ehr(file: UploadFile):
+    """
+    Step-1: User uploads raw EHR
+    → returns encrypted bytes
+    (Here, just mock encryption)
+    """
+    raw = await file.read()
+
+    encrypted = encrypt_bytes(raw)
+
+    return StreamingResponse(
+    io.BytesIO(encrypted),
+    media_type="application/octet-stream"
+)
+
+
+
+###############################################################
+# ✅ (2) Upload encrypted file → IPFS
+###############################################################
+@router.post("/ipfs-upload")
+async def upload_ipfs(file: UploadFile):
+    enc_bytes = await file.read()
+
+    cid = upload_to_ipfs(enc_bytes)
+
+    return {
+        "message": "Uploaded to IPFS",
+        "cid": cid,
+    }
+
+
+###############################################################
+# ✅ (3) Compute Chameleon Hash
+###############################################################
+@router.post("/chameleon-hash/{cid}")
+async def compute_ch(cid: str, public_key_hex: str = Form(...)):
+    """
+    Uses cid only → returns chameleon hash + random r
+    """
+    # For demo — no real consent/public key used
+    msg = encode_message(cid, True, bytes.fromhex(public_key_hex))
+
     r = _rand_scalar()
-    ch_hex, _ = ch_hash(msg, r, identity)
-
-    # Register on blockchain
-    tx_hash = register_record(cid, ch_hex, patient_id)
-
-    # Store record locally
-    records[patient_id] = {
-        "cid": cid,
-        "r": hex(r),
-        "chameleon_hash": ch_hex
-    }
-    RECORD_DB.write_text(json.dumps(records, indent=4))
+    ch_hex, _ = ch_hash(msg, r, bytes.fromhex(public_key_hex))
 
     return {
-        "message": "EHR uploaded successfully",
-        "cid": cid,
-        "tx_hash": tx_hash,
-        "chameleon_hash": ch_hex
+        "message": "Chameleon hash computed",
+        "ch": ch_hex,
+        "r": hex(r)
     }
 
-# ------------------------------
-# 3️⃣ Redact EHR
-# ------------------------------
+
+###############################################################
+# ✅ (4) Store on chain
+###############################################################
+@router.post("/store-record")
+async def store_record_endpoint(
+    cid: str = Form(...),
+    ch: str = Form(...),
+    eth_address: str = Form(...)
+):
+    """
+    Step-4: Produce unsigned tx → MetaMask
+    """
+    # recordId = keccak(cid + wallet)
+    record_id = Web3.keccak(text=cid + eth_address).hex()
+
+    tx_data = store_record(
+        eth_address=eth_address,
+        record_id=record_id,
+        ch_hash=ch,
+        cid=cid,
+        consent=True
+    )
+
+    return {
+        "message": "TX ready — sign via MetaMask",
+        "record_id": record_id,
+        "tx_data": tx_data
+    }
+
+
+###############################################################
+# ✅ 4) REDACTION → tx_data
+###############################################################
 @router.post("/redact")
-async def redact_ehr(new_file: UploadFile, patient_id: str = Form(...)):
-    users = json.loads(USER_DB.read_text())
-    records = json.loads(RECORD_DB.read_text())
+async def redact_ehr(
+    file: UploadFile,
+    old_cid: str = Form(...),
+    public_key_hex: str = Form(...),
+    private_key_hex: str = Form(...),
+    c_hash: str = Form(...),
+    old_r_hex: str = Form(...),
+    record_id: str = Form(...),
+    eth_address: str = Form(...),
+    consent_active: bool = Form(...)
+):
+    # Read new encrypted bytes
+    new_bytes = await file.read()
+    new_cid = upload_to_ipfs(new_bytes)
 
-    if patient_id not in users or patient_id not in records:
-        raise HTTPException(status_code=404, detail="Record or user not found")
+    # Compute new r'
+    pub = bytes.fromhex(public_key_hex)
+    sk = int(private_key_hex, 16)
+    old_r = int(old_r_hex, 16)
 
-    # Save new file temporarily
-    if not new_file.filename:
-        raise HTTPException(status_code=400, detail="No filename provided.")
-    new_path = TEMP_DIR / new_file.filename
-    with open(new_path, "wb") as f:
-        f.write(await new_file.read())
+    old_msg = encode_message(old_cid, consent_active, pub)
+    new_msg = encode_message(new_cid, consent_active, pub)
 
-    # Upload new (redacted) version to IPFS
-    new_cid = upload_to_ipfs(str(new_path))
+    new_r = forge_r(old_r, sk, old_msg, new_msg)
 
-    # Load old record data
-    old_record = records[patient_id]
-    old_cid = old_record["cid"]
-    original_r = int(old_record["r"], 16)
-    old_ch = old_record["chameleon_hash"]
+    # Build tx — FE signs
+    tx_data = update_record(
+        eth_address=eth_address,
+        record_id=record_id,
+        cid=new_cid,
+        ch_hash=c_hash
+    )
 
-    # Get identity and private key
-    ecc_pub = bytes.fromhex(users[patient_id]["ecc_public_key"])
-    ecc_priv = int(users[patient_id]["ecc_private_key"], 16)
-
-    # Compute new r′ using forge_r() → keeps hash constant
-    old_msg = encode_message(old_cid, True, ecc_pub)
-    new_msg = encode_message(new_cid, True, ecc_pub)
-    new_r = forge_r(original_r, ecc_priv, old_msg, new_msg)
-
-    # Update blockchain (same hash, new CID)
-    tx_hash = redact_record(patient_id, old_cid, new_cid, old_ch)
-
-    # Update local record
-    records[patient_id].update({"cid": new_cid, "r": hex(new_r)})
-    RECORD_DB.write_text(json.dumps(records, indent=4))
+    new_ch_hash, _ = ch_hash(new_msg, new_r, pub)
 
     return {
-        "message": "EHR redacted successfully",
+        "message": "Redaction prepared — sign via MetaMask",
         "new_cid": new_cid,
-        "chameleon_hash": old_ch,
-        "tx_hash": tx_hash
+        "new_r": hex(new_r),
+        "new_ch_hash": new_ch_hash,
+        "tx_data": tx_data,
+        "record_id": record_id
     }
 
-# ------------------------------
-# 4️⃣ Doctor Access Request (ZKP)
-# ------------------------------
+
+###############################################################
+# ✅ 5) ACCESS REQUEST → tx_data
+###############################################################
 @router.post("/access-request")
-async def request_access(doctor_addr: str = Form(...), patient_id: str = Form(...)):
-    users = json.loads(USER_DB.read_text())
-    if patient_id not in users:
-        raise HTTPException(status_code=401, detail="Patient not registered")
+async def access_request(
+    doctor_address: str = Form(...),
+    patient_address: str = Form(...),
+    record_id: str = Form(...),
+    role: int = Form(...),
+    timestamp: int = Form(...),
+    nonce: int = Form(...),
+    sig_v: int = Form(...),
+    sig_r: str = Form(...),
+    sig_s: str = Form(...),
+    ttl: int = Form(...)
+):
+    from blockchain_utils import get_record_by_id
+    record = get_record_by_id(record_id)
 
-    proof = generate_proof(patient_id)
-    verified = verify_proof(proof)
-    if not verified:
-        return {"error": "Proof verification failed"}
+    if not record["consent"]:
+        raise HTTPException(400, detail="Consent inactive")
 
-    token = f"TEMP-TOKEN-{doctor_addr[:6]}-{patient_id[:6]}"
-    return {"message": "Access granted", "access_token": token}
+    tx_data = submit_access_request(
+        doctor=doctor_address,
+        patient=patient_address,
+        record_id=record_id,
+        role=role,
+        timestamp=timestamp,
+        nonce=nonce,
+        v=sig_v,
+        r=sig_r,
+        s=sig_s,
+        ttl=ttl
+    )
+
+    return {
+        "message": "Access ready — sign via MetaMask",
+        "tx_data": tx_data
+    }
 
 
-from fastapi.responses import FileResponse
+###############################################################
+# ✅ 6) DOWNLOAD RECORD (returns decrypted PDF bytes)
+###############################################################
+@router.get("/download/{cid}")
+async def download_ehr(cid: str):
+    decrypted_bytes = download_from_ipfs(cid)
 
-@router.get("/record/{patient_id}")
-async def get_patient_record(patient_id: str):
+    return StreamingResponse(
+        io.BytesIO(decrypted_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{cid}.pdf"'}
+    )
+
+@router.get("/resolve/{patient_name}")
+async def resolve_identity(patient_name: str):
     """
-    Fetches the EHR record for a given patient directly from blockchain,
-    downloads from IPFS, and returns the file.
+    Returns patient_address + record_id from chain.
     """
-    users = json.loads(USER_DB.read_text())
+    from blockchain_utils import resolve_patient
 
-    if patient_id not in users:
+    patient_address, record_id, idHashhex, idHashuint = resolve_patient(patient_name)
+    print(patient_address, record_id, idHashhex, idHashuint)
+
+    if not patient_address:
         raise HTTPException(status_code=404, detail="Patient not found")
 
-    # Load smart contract
-    contract = load_contract()
-
-    try:
-        # 🔗 Fetch record details from blockchain
-        _, chameleon_hash, cid, _, _ = contract.functions.getRecord(SENDER_ADDRESS).call()
-
-        if not cid:
-            raise HTTPException(status_code=404, detail="No record found for this patient on blockchain")
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Blockchain query failed: {e}")
-
-    # Download the file from IPFS
-    downloaded_path = TEMP_DIR / f"{patient_id}_ehr.pdf"
-    try:
-        from ipfs.ipfs_helper import download_from_ipfs
-        download_from_ipfs(cid, str(downloaded_path))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to download from IPFS: {e}")
-
-    # Return file
-    headers = {
-        "X-Patient-ID": str(patient_id),
-        "X-IPFS-CID": str(cid),
-        "X-Chameleon-Hash": str(chameleon_hash),
+    return {
+        "patient_address": patient_address,
+        "record_id": record_id,
+        "idHashhex": idHashhex,
+        "idHashuint": idHashuint
     }
 
-    return FileResponse(
-        path=downloaded_path,
-        filename=f"{patient_id}_ehr.pdf",
-        media_type="application/octet-stream",
-        headers=headers
+@router.get("/requests")
+async def requests_for_patient(patient_name: str):
+    from blockchain_utils import resolve_patient
+    from blockchain_utils import fetch_access_logs_for_patient
+    import time
+
+    patient_address, record_id, idHashhex, idHashuint = resolve_patient(patient_name)
+
+    if not patient_address:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    events = fetch_access_logs_for_patient(patient_address)
+    now = int(time.time())
+
+    formatted = []
+    for ev in events:
+        formatted.append({
+            "doctor": ev.get("doctor_name") or ev.get("doctor_address"),
+            "doctor_address": ev.get("doctor_address"),
+            "patient": ev.get("patient_name") or ev.get("patient_address"),
+            "record_id": ev["record_id"],
+            "token": ev["token"],
+            "expiresAt": ev["expiresAt"],
+            "status": "approved" if ev["expiresAt"] >= now else "expired"
+        })
+
+    return {
+        "patient": patient_address,
+        "requests": formatted
+    }
+
+@router.get("/doctor/requests")
+async def requests_for_doctor(doctor_addr: str):
+    from blockchain_utils import fetch_access_logs_for_doctor
+    import time
+
+    events = fetch_access_logs_for_doctor(doctor_addr)
+    now = int(time.time())
+
+    formatted = []
+    for ev in events:
+        formatted.append({
+            "patient": ev.get("patient_name") or ev.get("patient_address"),
+            "patient_address": ev.get("patient_address"),
+            "record_id": ev["record_id"],
+            "token": ev["token"],
+            "expiresAt": ev["expiresAt"],
+            "status": "approved" if ev["expiresAt"] >= now else "expired"
+        })
+
+    return {
+        "doctor": doctor_addr,
+        "requests": formatted
+    }
+
+@router.get("/view/{record_id}")
+async def view_ehr(
+    record_id: str,
+    doctor: str,
+    token: str
+):
+    from blockchain_utils import check_token_valid, get_record_by_id
+    import time
+
+    # 1) Validate token
+    if not check_token_valid(token):
+        raise HTTPException(status_code=403, detail="Token expired")
+
+    # 2) Fetch record details
+    rec = get_record_by_id(record_id)
+    if not rec:
+        raise HTTPException(status_code=404, detail="Record not found")
+
+    cid = rec.get("encryptedCid")
+    if not cid:
+        raise HTTPException(status_code=404, detail="CID missing")
+
+    # 3) Fetch + decrypt
+    decrypted = download_from_ipfs(cid)
+
+    # 4) Stream only → inline view
+    return StreamingResponse(
+        io.BytesIO(decrypted),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{record_id}.pdf"'}
     )
+
+@router.post("/toggle-consent")
+async def toggle_consent_endpoint(
+    record_id: str = Form(...),
+    eth_address: str = Form(...),
+    active: bool = Form(...)
+):
+    """
+    Build tx → MetaMask signs
+    """
+    from blockchain_utils import toggle_consent_tx
+
+    tx_data = toggle_consent_tx(
+        eth_address=eth_address,
+        record_id=record_id,
+        active=active
+    )
+
+    return {
+        "message": "Consent toggle prepared — sign via MetaMask",
+        "tx_data": tx_data
+    }

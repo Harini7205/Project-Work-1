@@ -1,120 +1,304 @@
-/* Page background */
-body {
-  margin: 0;
-  padding: 0;
-  background: #f3f4f6;
-  font-family: "Inter", sans-serif;
+/* Same soft background theme */
+.patient-wrapper {
+  min-height: 100vh;
+  background: linear-gradient(145deg, #dfe8ff, #f7faff);
+  animation: fadeIn 0.6s ease-in;
 }
 
-/* Main container */
-.patient-container {
-  padding: 2rem;
-  min-height: 100vh;
+/* Fade-in animation */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ===================== HEADER ====================== */
+
+.patient-header {
   display: flex;
-  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 30px;
+  background: #ffffffcc;
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid #d3dfff;
+  position: relative;
+}
+
+.left-group, .right-group {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.app-name {
+  font-size: 28px;
+  font-weight: 800;
+  color: #243b6b;
+}
+
+/* Bell icon */
+.bell {
+  position:relative;
+  padding-top: 2px;
+  cursor: pointer;
+  color: #243b6b;
+  transition: 0.25s ease;
+}
+
+.bell:hover {
+  transform: scale(1.1);
+  color:#4568dc;
+}
+
+.badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  background: #ff3b30;
+  color: white;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 50%;
+  font-weight: bold;
+  min-width: 18px;
+  height: 18px;
+  display: flex;
+  justify-content: center;
   align-items: center;
 }
 
-/* Title */
-.patient-title {
-  font-size: 2rem;
-  font-weight: 700;
-  margin-bottom: 1.5rem;
-  color: #1f2937;
-}
-
-/* Buttons container */
-.patient-actions {
+/* User info and dropdown */
+.user-info {
   display: flex;
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-
-/* Primary button */
-.btn-primary {
-  background: #2563eb;
-  color: #fff;
-  padding: 12px 22px;
-  border-radius: 8px;
-  border: none;
+  align-items: center;
+  gap: 6px;
   cursor: pointer;
+  color: #243b6b;
   font-weight: 600;
-  transition: 0.25s;
 }
 
-.btn-primary:hover {
-  background: #1d4ed8;
-  transform: translateY(-2px);
-}
-
-/* Secondary button */
-.btn-secondary {
-  background: #6b7280;
-  color: #fff;
-  padding: 12px 22px;
-  border-radius: 8px;
-  border: none;
-  cursor: pointer;
-  font-weight: 600;
-  transition: 0.25s;
-}
-
-.btn-secondary:hover {
-  background: #4b5563;
-  transform: translateY(-2px);
-}
-
-/* Card box style */
-.card-box {
-  margin-top: 2rem;
-  padding: 1.5rem;
-  background: #ffffff;
+.dropdown-menu {
+  position: absolute;
+  top: 65px;
+  right: 25px;
+  background: white;
+  border: 1px solid #e4e9ff;
   border-radius: 12px;
-  box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.08);
-  width: 100%;
-  max-width: 450px;
-}
-
-/* Upload input */
-.file-input {
-  width: 100%;
-  padding: 8px;
-  margin-bottom: 1.25rem;
-}
-
-/* Requests list */
-.request-row {
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
   padding: 10px;
-  margin: 6px 0;
+  width: 130px;
+  box-shadow: 0 12px 28px rgba(120,136,255,0.18);
+  animation: scaleIn 0.25s ease;
+}
+
+.dropdown-menu button {
+  width: 100%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 15px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  color: #243b6b;
+}
+
+.dropdown-menu button:hover {
+  background: #eef2ff;
+}
+
+/* scale animation */
+@keyframes scaleIn {
+  from { transform: scale(0.9); opacity: 0 }
+  to   { transform: scale(1); opacity: 1 }
+}
+
+/* ================== REQUEST POPUP =================== */
+
+.requests-popup {
+  position: absolute;
+  top: 65px;
+  right: 15px;
+  background: white;
+  border-radius: 14px;
+  box-shadow: 0 12px 28px rgba(120,136,255,0.18);
+  padding: 18px 20px;
+  width: 330px;
+  z-index: 200;
+  animation: scaleIn 0.25s ease;
+  border: 1px solid #e4e9ff;
+}
+
+.requests-popup h3 {
+  font-size: 18px;
+  font-weight: 700;
+  color: #243b6b;
+  margin-bottom: 10px;
+}
+
+.request-item {
   display: flex;
   justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid #e7edff;
 }
 
-.request-row span {
-  font-weight: 500;
+.req-actions {
+  display: flex;
+  gap: 12px;
 }
 
-/* Empty request text */
-.no-requests {
+.approve {
+  color: #2b8a3e;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+.approve:hover {
+  transform: scale(1.2);
+}
+
+.reject {
+  color: #d33;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+.reject:hover {
+  transform: scale(1.2);
+}
+
+/* ===================== MAIN ====================== */
+
+.patient-main {
   text-align: center;
-  margin-top: 1rem;
-  color: #4b5563;
+  margin-top: 60px;
+  padding: 0 20px;
+  animation: fadeInUp 0.6s ease-in;
 }
 
-/* Smooth fade animation helper */
-.fade-in {
-  animation: fadeIn 0.35s ease-in-out;
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0px);
-  }
+.patient-main h1 {
+  font-size: 38px;
+  font-weight: 800;
+  color: #1b2e52;
+  margin-bottom: 10px;
+}
+
+.patient-main p {
+  font-size: 18px;
+  color: #4f5f82;
+  max-width: 650px;
+  margin: auto;
+}
+
+/* =================== Upload Card =================== */
+
+.upload-card {
+  margin: 40px auto 0;
+  width: 360px;
+  background: white;
+  padding: 32px 28px;
+  border-radius: 18px;
+  box-shadow: 0 12px 28px rgba(120,136,255,0.18);
+  border: 1px solid #e6ecff;
+  text-align: center;
+  animation: fadeInUp 0.6s ease;
+}
+
+.upload-icon {
+  font-size: 90px;
+  color: #4568dc;
+  margin-bottom: 18px;
+  animation: float 3s infinite ease-in-out;
+}
+
+/* Float animation */
+@keyframes float {
+  0%   { transform: translateY(0px); }
+  50%  { transform: translateY(-6px); }
+  100% { transform: translateY(0px); }
+}
+
+.upload-card input {
+  margin-top: 12px;
+  font-size: 15px;
+}
+
+.upload-btn {
+  margin-top: 18px;
+  background: #3b6fff;
+  color: white;
+  border: none;
+  padding: 12px 18px;
+  border-radius: 10px;
+  font-size: 16px;
+  cursor: pointer;
+  width: 100%;
+  transition: 0.25s ease;
+}
+
+.upload-btn:hover {
+  background: #234fdd;
+}
+
+.request-item-card {
+  background: #ffffff;
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  font-size: 14px;
+}
+
+.req-row {
+  display: flex;
+  justify-content: space-between;
+  margin: 4px 0;
+}
+
+.label {
+  font-weight: 600;
+  color: #444;
+}
+
+.value {
+  font-family: monospace;
+  color: #222;
+}
+
+.status {
+  font-weight: bold;
+  text-transform: capitalize;
+}
+
+.status.approved {
+  color: green;
+}
+
+.status.pending {
+  color: #d9b200;
+}
+
+.status.rejected {
+  color: red;
+}
+
+.req-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+  gap: 12px;
+}
+
+.approve {
+  color: green;
+  cursor: pointer;
+}
+
+.reject {
+  color: red;
+  cursor: pointer;
 }

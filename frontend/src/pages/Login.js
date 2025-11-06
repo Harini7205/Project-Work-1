@@ -2,46 +2,55 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import "../styling/login.css";
 import { isMetaMaskInstalled, requestWalletAccount } from "../web3/connectWallet";
-import {
-  FaUserShield,
-  FaUserMd,
-  FaUserInjured
-} from "react-icons/fa";
+import { sendTx } from "../pages/TransactionUtils";
+import { FaUserShield, FaUserMd, FaUserInjured } from "react-icons/fa";
 
 export default function Login() {
   const nav = useNavigate();
 
   const [message, setMessage] = useState("");
-  const [userName, setUserName] = useState("");
+  const [userName, setUserName] = useState(localStorage.getItem("name") || "");
   const [showRoles, setShowRoles] = useState(false);
-
   const [showMetaMaskInfo, setShowMetaMaskInfo] = useState(false);
   const [rolePending, setRolePending] = useState(null);
 
+  // Clear role only if user reloads fresh login
   useEffect(() => {
-    // Ensure fresh login every time
-    localStorage.removeItem("wallet");
-    localStorage.removeItem("role");
-    localStorage.removeItem("name");
-  }, []);
+  console.log("LocalStorage values:", {
+    wallet: localStorage.getItem("wallet"),
+    role: localStorage.getItem("role"),
+    name: localStorage.getItem("name"),
+  });
+}, []);
 
-  // Step 1 — Next button
+
+  // Proceed to role selection ONLY if name is available
   const handleNext = () => {
     if (!userName.trim()) {
       setMessage("⚠️ Please enter your name first.");
       return;
     }
+
+    localStorage.setItem("name", userName);
     setShowRoles(true);
-    setMessage(""); // clear previous messages
+    setMessage("");
   };
 
-  // Step 2 — click role → ask MetaMask confirmation
+  // User clicked a role
   const askPermissionBeforeConnect = (role) => {
+    // Check if role already exists
+    const savedRole = localStorage.getItem("role");
+    if (savedRole && savedRole !== role) {
+      setMessage(
+        `⚠️ This wallet is already registered as '${savedRole}'. You cannot register as '${role}'.`
+      );
+      return;
+    }
+
     setRolePending(role);
     setShowMetaMaskInfo(true);
   };
 
-  // Step 3 — user approves → connect MetaMask
   const handleMetaMaskProceed = async () => {
     setShowMetaMaskInfo(false);
 
@@ -60,21 +69,56 @@ export default function Login() {
       return;
     }
 
+    const savedRole = localStorage.getItem("role");
+    if (savedRole && savedRole !== role) {
+      setMessage(
+        `⚠️ This wallet is already registered as '${savedRole}'. You cannot register as '${role}'.`
+      );
+      return;
+    }
+
+    // Save wallet + role
     localStorage.setItem("wallet", address);
     localStorage.setItem("role", role);
-    localStorage.setItem("name", userName);
 
-    // Register user
-    const response = await fetch("http://127.0.0.1:8000/ehr/register", {
+    // ✅ Step 1 — Generate ECC keys
+    const keyResp = await fetch("http://127.0.0.1:8000/ehr/generate-keys", {
       method: "POST",
-      body: new URLSearchParams({ name: address }),
     });
+    const { private_key, public_key } = await keyResp.json();
+    alert("✅ Private and public keys generated");
 
-    if (response.status === 200 || response.status === 400) {
-      nav("/" + role);
-    } else {
-      setMessage("⚠️ Could not authenticate. Try again.");
+    localStorage.setItem("priv", private_key);
+    localStorage.setItem("pub", public_key);
+
+    // ✅ Step 2 — Register
+    const regForm = new FormData();
+    regForm.append("public_key_hex", public_key);
+    regForm.append("eth_address", address);
+    regForm.append("name", userName);
+
+    const regResp = await fetch("http://127.0.0.1:8000/ehr/register", {
+      method: "POST",
+      body: regForm,
+    });
+    const data = await regResp.json();
+
+    // ✅ Step 3 — MetaMask TX
+    try {
+      if (data.tx_data) {
+        const txHash = await sendTx(data.tx_data);
+        console.log("✅ Registered on-chain:", txHash);
+      } else {
+        console.warn("No tx_data returned (maybe already registered)");
+      }
+    } catch (err) {
+      console.error(err);
+      setMessage("⚠️ On-chain registration failed");
+      return;
     }
+    alert(`Public key registered on-chain using wallet address ${address}`);
+
+    nav("/" + role);
   };
 
   return (
@@ -84,8 +128,8 @@ export default function Login() {
 
       {message && <p className="warning">{message}</p>}
 
-      {/* ✅ Name input */}
-      {!showRoles && (
+      {/* Ask name only if missing */}
+      {!showRoles && !localStorage.getItem("name") && (
         <div className="name-input-container">
           <label>Your Name</label>
           <input
@@ -100,39 +144,42 @@ export default function Login() {
         </div>
       )}
 
-      {/* ✅ Role selection after Next */}
+      {/* If name already stored → skip Next */}
+      {!showRoles && localStorage.getItem("name") && (
+        <>
+          <p className="tagline">Welcome back, <b>{localStorage.getItem("name")}</b></p>
+          <button className="next-btn" onClick={() => setShowRoles(true)}>
+            Continue →
+          </button>
+        </>
+      )}
+
+      {/* Role selection */}
       {showRoles && (
         <>
           <p className="select-role">Select your role</p>
-
           <div className="role-grid">
-
-            {/* ✅ Patient */}
-            <div
-              onClick={() => askPermissionBeforeConnect("patient")}
-              className="role-box"
-            >
+            <div onClick={() => askPermissionBeforeConnect("patient")} className="role-box">
               <FaUserInjured className="role-icon" />
               <h3>Patient</h3>
               <p>Upload, update & manage your EHR</p>
             </div>
 
-            {/* ✅ Doctor */}
-            <div
-              onClick={() => askPermissionBeforeConnect("doctor")}
-              className="role-box"
-            >
+            <div onClick={() => askPermissionBeforeConnect("doctor")} className="role-box">
               <FaUserMd className="role-icon" />
               <h3>Doctor</h3>
               <p>Request access to patient records</p>
             </div>
 
-            {/* ✅ Admin */}
             <div
               onClick={() => {
+                const role=localStorage.getItem("role");
+                if (role && role !== "admin") {
+                  alert("Cannot login user as admin");
+                  return;
+                }
                 const key = prompt("Enter Admin Secret:");
                 if (key === "IamAdmin") {
-                  localStorage.setItem("name", userName);
                   nav("/admin");
                 } else {
                   alert("❌ Invalid Admin Secret");
@@ -144,12 +191,11 @@ export default function Login() {
               <h3>Admin</h3>
               <p>View blockchain record history</p>
             </div>
-
           </div>
         </>
       )}
 
-      {/* ✅ MetaMask info modal */}
+      {/* MetaMask warning modal */}
       {showMetaMaskInfo && (
         <div className="modal-overlay">
           <div className="modal-content">
@@ -157,28 +203,15 @@ export default function Login() {
             <p>
               You will now be asked to connect to <b>MetaMask</b>.
               <br /><br />
-              MetaMask is a safe testing wallet used here to assign a temporary account
-              with <b>test ETH</b>.  
-              <br /><br />
+              Test ETH will be used — no real money.
             </p>
-            <ul className="bullet-points">
-            <li>✅ No real money involved</li>
-            <li>✅ Safe & reversible</li>
-            <li>✅ Required only to authenticate securely</li>
-            </ul>
 
             <div className="modal-btn-row">
-              <button
-                onClick={() => setShowMetaMaskInfo(false)}
-                className="btn-cancel"
-              >
+              <button onClick={() => setShowMetaMaskInfo(false)} className="btn-cancel">
                 Cancel
               </button>
 
-              <button
-                onClick={handleMetaMaskProceed}
-                className="btn-confirm"
-              >
+              <button onClick={handleMetaMaskProceed} className="btn-confirm">
                 Continue
               </button>
             </div>
