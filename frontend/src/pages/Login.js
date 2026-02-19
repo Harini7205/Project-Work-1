@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "../styling/login.css";
 import { isMetaMaskInstalled, requestWalletAccount } from "../web3/connectWallet";
@@ -8,215 +8,183 @@ import { FaUserShield, FaUserMd, FaUserInjured } from "react-icons/fa";
 export default function Login() {
   const nav = useNavigate();
 
+  const [email, setEmail] = useState("");
+  const [otp, setOtp] = useState("");
+  const [role, setRole] = useState(null);
+  const [step, setStep] = useState("email"); // email → otp → wallet
   const [message, setMessage] = useState("");
-  const [userName, setUserName] = useState(localStorage.getItem("name") || "");
-  const [showRoles, setShowRoles] = useState(false);
-  const [showMetaMaskInfo, setShowMetaMaskInfo] = useState(false);
-  const [rolePending, setRolePending] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-  // Clear role only if user reloads fresh login
+  /* ======================================================
+     STEP 1 — REQUEST OTP
+  ====================================================== */
+
   useEffect(() => {
-  console.log("LocalStorage values:", {
-    wallet: localStorage.getItem("wallet"),
-    role: localStorage.getItem("role"),
-    name: localStorage.getItem("name"),
-  });
-}, []);
-
-
-  // Proceed to role selection ONLY if name is available
-  const handleNext = () => {
-    if (!userName.trim()) {
-      setMessage("⚠️ Please enter your name first.");
+    localStorage.clear();
+  }, []);
+  
+  const requestOtp = async () => {
+    if (!email) {
+      setMessage("Enter email");
       return;
     }
 
-    localStorage.setItem("name", userName);
-    setShowRoles(true);
-    setMessage("");
+    setLoading(true);
+    try {
+      await fetch("http://127.0.0.1:8000/ehr/auth/request-otp", {
+        method: "POST",
+        body: new URLSearchParams({ email }),
+      });
+      setStep("otp");
+      setMessage("OTP sent to your email");
+    } catch {
+      setMessage("Failed to send OTP");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // User clicked a role
-  const askPermissionBeforeConnect = (role) => {
-    // Check if role already exists
-    const savedRole = localStorage.getItem("role");
-    if (savedRole && savedRole !== role) {
-      setMessage(
-        `⚠️ This wallet is already registered as '${savedRole}'. You cannot register as '${role}'.`
-      );
+  /* ======================================================
+     STEP 2 — VERIFY OTP + CONNECT WALLET
+  ====================================================== */
+  const verifyOtpAndLogin = async () => {
+    if (!otp || !role) {
+      setMessage("OTP and role required");
       return;
     }
-
-    setRolePending(role);
-    setShowMetaMaskInfo(true);
-  };
-
-  const handleMetaMaskProceed = async () => {
-    setShowMetaMaskInfo(false);
-
-    const role = rolePending;
-    if (!role) return;
 
     if (!isMetaMaskInstalled()) {
-      setMessage("⚠️ MetaMask not detected. Redirecting to install page.");
       window.open("https://metamask.io/download/", "_blank");
       return;
     }
 
-    const address = await requestWalletAccount();
-    if (!address) {
-      setMessage("⚠️ Unlock or create MetaMask wallet first.");
-      return;
-    }
+    setLoading(true);
 
-    const savedRole = localStorage.getItem("role");
-    if (savedRole && savedRole !== role) {
-      setMessage(
-        `⚠️ This wallet is already registered as '${savedRole}'. You cannot register as '${role}'.`
-      );
-      return;
-    }
-
-    // Save wallet + role
-    localStorage.setItem("wallet", address);
-    localStorage.setItem("role", role);
-
-    // ✅ Step 1 — Generate ECC keys
-    const keyResp = await fetch("http://127.0.0.1:8000/ehr/generate-keys", {
-      method: "POST",
-    });
-    const { private_key, public_key } = await keyResp.json();
-    alert("✅ Private and public keys generated");
-
-    localStorage.setItem("priv", private_key);
-    localStorage.setItem("pub", public_key);
-
-    // ✅ Step 2 — Register
-    const regForm = new FormData();
-    regForm.append("public_key_hex", public_key);
-    regForm.append("eth_address", address);
-    regForm.append("name", userName);
-
-    const regResp = await fetch("http://127.0.0.1:8000/ehr/register", {
-      method: "POST",
-      body: regForm,
-    });
-    const data = await regResp.json();
-
-    // ✅ Step 3 — MetaMask TX
     try {
-      if (data.tx_data) {
-        const txHash = await sendTx(data.tx_data);
-        console.log("✅ Registered on-chain:", txHash);
-      } else {
-        console.warn("No tx_data returned (maybe already registered)");
+      const wallet = await requestWalletAccount();
+      if (!wallet) {
+        setMessage("Unlock MetaMask");
+        return;
       }
-    } catch (err) {
-      console.error(err);
-      setMessage("⚠️ On-chain registration failed");
-      return;
-    }
-    alert(`Public key registered on-chain using wallet address ${address}`);
 
-    nav("/" + role);
+      const res = await fetch("http://127.0.0.1:8000/ehr/auth/verify-otp", {
+        method: "POST",
+        body: new URLSearchParams({
+          email,
+          otp,
+          wallet,
+          role,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail);
+
+      localStorage.setItem("email", email);
+      localStorage.setItem("wallet", wallet);
+      localStorage.setItem("role", role);
+
+      /* ---------- Generate ECC keys ---------- */
+      const keyResp = await fetch("http://127.0.0.1:8000/ehr/generate-keys", {
+        method: "POST",
+      });
+      const { private_key, public_key } = await keyResp.json();
+
+      localStorage.setItem("priv", private_key);
+      localStorage.setItem("pub", public_key);
+
+      /* ---------- Register on-chain (once) ---------- */
+      if (!localStorage.getItem("onchain_registered")) {
+        const form = new FormData();
+        form.append("public_key_hex", public_key);
+        form.append("eth_address", wallet);
+
+        const regResp = await fetch("http://127.0.0.1:8000/ehr/register", {
+          method: "POST",
+          body: form,
+        });
+        const regData = await regResp.json();
+
+        alert("Confirm blockchain transaction in MetaMask");
+        await sendTx(regData.tx_data);
+
+        localStorage.setItem("onchain_registered", "1");
+      }
+
+      nav("/" + role);
+    } catch (e) {
+      console.error(e);
+      setMessage("Login failed");
+    } finally {
+      setLoading(false);
+    }
   };
 
+  /* ======================================================
+     ADMIN LOGIN (NO WALLET)
+  ====================================================== */
+  const adminLogin = () => {
+    const pwd = prompt("Enter Admin Password");
+    if (pwd === "IamAdmin") nav("/admin");
+    else alert("Invalid admin password");
+  };
+
+  /* ======================================================
+     UI
+  ====================================================== */
   return (
     <div className="login-page">
       <h1>EHR Access Portal</h1>
-      <p className="tagline">Blockchain-secured Electronic Health Record Management</p>
+      <p className="tagline">Secure Blockchain EHR</p>
 
       {message && <p className="warning">{message}</p>}
 
-      {/* Ask name only if missing */}
-      {!showRoles && !localStorage.getItem("name") && (
-        <div className="name-input-container">
-          <label>Your Name</label>
+      {/* STEP 1 — EMAIL */}
+      {step === "email" && (
+        <div className="login-box">
+          <input
+            type="email"
+            placeholder="Enter email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+          <button onClick={requestOtp} disabled={loading}>
+            Send OTP
+          </button>
+        </div>
+      )}
+
+      {/* STEP 2 — OTP + ROLE */}
+      {step === "otp" && (
+        <>
           <input
             type="text"
-            placeholder="Enter full name"
-            value={userName}
-            onChange={(e) => setUserName(e.target.value)}
+            placeholder="Enter OTP"
+            value={otp}
+            onChange={(e) => setOtp(e.target.value)}
           />
-          <button className="next-btn" onClick={handleNext}>
-            Next →
-          </button>
-        </div>
-      )}
 
-      {/* If name already stored → skip Next */}
-      {!showRoles && localStorage.getItem("name") && (
-        <>
-          <p className="tagline">Welcome back, <b>{localStorage.getItem("name")}</b></p>
-          <button className="next-btn" onClick={() => setShowRoles(true)}>
-            Continue →
-          </button>
-        </>
-      )}
-
-      {/* Role selection */}
-      {showRoles && (
-        <>
-          <p className="select-role">Select your role</p>
           <div className="role-grid">
-            <div onClick={() => askPermissionBeforeConnect("patient")} className="role-box">
-              <FaUserInjured className="role-icon" />
+            <div onClick={() => setRole("patient")} className="role-box">
+              <FaUserInjured />
               <h3>Patient</h3>
-              <p>Upload, update & manage your EHR</p>
             </div>
 
-            <div onClick={() => askPermissionBeforeConnect("doctor")} className="role-box">
-              <FaUserMd className="role-icon" />
+            <div onClick={() => setRole("doctor")} className="role-box">
+              <FaUserMd />
               <h3>Doctor</h3>
-              <p>Request access to patient records</p>
             </div>
 
-            <div
-              onClick={() => {
-                const role=localStorage.getItem("role");
-                if (role && role !== "admin") {
-                  alert("Cannot login user as admin");
-                  return;
-                }
-                const key = prompt("Enter Admin Secret:");
-                if (key === "IamAdmin") {
-                  nav("/admin");
-                } else {
-                  alert("❌ Invalid Admin Secret");
-                }
-              }}
-              className="role-box"
-            >
-              <FaUserShield className="role-icon" />
+            <div onClick={adminLogin} className="role-box">
+              <FaUserShield />
               <h3>Admin</h3>
-              <p>View blockchain record history</p>
             </div>
           </div>
+
+          <button onClick={verifyOtpAndLogin} disabled={loading}>
+            Login
+          </button>
         </>
-      )}
-
-      {/* MetaMask warning modal */}
-      {showMetaMaskInfo && (
-        <div className="modal-overlay">
-          <div className="modal-content">
-            <h2 className="modal-title">Before You Continue</h2>
-            <p>
-              You will now be asked to connect to <b>MetaMask</b>.
-              <br /><br />
-              Test ETH will be used — no real money.
-            </p>
-
-            <div className="modal-btn-row">
-              <button onClick={() => setShowMetaMaskInfo(false)} className="btn-cancel">
-                Cancel
-              </button>
-
-              <button onClick={handleMetaMaskProceed} className="btn-confirm">
-                Continue
-              </button>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   );

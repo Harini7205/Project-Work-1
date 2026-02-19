@@ -1,5 +1,5 @@
 [
-    {
+  {
       "inputs": [],
       "stateMutability": "nonpayable",
       "type": "constructor"
@@ -74,12 +74,6 @@
           "internalType": "address",
           "name": "user",
           "type": "address"
-        },
-        {
-          "indexed": false,
-          "internalType": "string",
-          "name": "name",
-          "type": "string"
         },
         {
           "indexed": false,
@@ -184,87 +178,6 @@
     {
       "inputs": [
         {
-          "internalType": "address",
-          "name": "provider",
-          "type": "address"
-        },
-        {
-          "internalType": "address",
-          "name": "patient",
-          "type": "address"
-        },
-        {
-          "internalType": "bytes32",
-          "name": "recordId",
-          "type": "bytes32"
-        },
-        {
-          "internalType": "uint8",
-          "name": "role",
-          "type": "uint8"
-        },
-        {
-          "internalType": "uint64",
-          "name": "timestamp",
-          "type": "uint64"
-        },
-        {
-          "internalType": "uint256",
-          "name": "nonce",
-          "type": "uint256"
-        }
-      ],
-      "name": "debugReqHash",
-      "outputs": [
-        {
-          "internalType": "bytes32",
-          "name": "reqHash",
-          "type": "bytes32"
-        },
-        {
-          "internalType": "bytes32",
-          "name": "digest",
-          "type": "bytes32"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "string",
-          "name": "name",
-          "type": "string"
-        }
-      ],
-      "name": "getAddressByName",
-      "outputs": [
-        {
-          "internalType": "address",
-          "name": "",
-          "type": "address"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "getDomainSeparator",
-      "outputs": [
-        {
-          "internalType": "bytes32",
-          "name": "",
-          "type": "bytes32"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
           "internalType": "bytes32",
           "name": "recordId",
           "type": "bytes32"
@@ -324,25 +237,6 @@
       "inputs": [
         {
           "internalType": "address",
-          "name": "patient",
-          "type": "address"
-        }
-      ],
-      "name": "getRecordsOf",
-      "outputs": [
-        {
-          "internalType": "bytes32[]",
-          "name": "",
-          "type": "bytes32[]"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "address",
           "name": "",
           "type": "address"
         }
@@ -363,30 +257,6 @@
           "internalType": "bool",
           "name": "exists",
           "type": "bool"
-        },
-        {
-          "internalType": "string",
-          "name": "name",
-          "type": "string"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "string",
-          "name": "",
-          "type": "string"
-        }
-      ],
-      "name": "nameToAddress",
-      "outputs": [
-        {
-          "internalType": "address",
-          "name": "",
-          "type": "address"
         }
       ],
       "stateMutability": "view",
@@ -509,11 +379,6 @@
           "internalType": "bytes",
           "name": "pubKey",
           "type": "bytes"
-        },
-        {
-          "internalType": "string",
-          "name": "name",
-          "type": "string"
         }
       ],
       "name": "registerIdentity",
@@ -670,19 +535,6 @@
       "type": "function"
     },
     {
-      "inputs": [],
-      "name": "typeHashAccessRequest",
-      "outputs": [
-        {
-          "internalType": "bytes32",
-          "name": "",
-          "type": "bytes32"
-        }
-      ],
-      "stateMutability": "pure",
-      "type": "function"
-    },
-    {
       "inputs": [
         {
           "internalType": "bytes32",
@@ -724,4 +576,4 @@
       "stateMutability": "view",
       "type": "function"
     }
-  ]
+]

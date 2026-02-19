@@ -2,23 +2,28 @@
 pragma solidity ^0.8.20;
 
 contract AccessRegistry {
+
     // ----------------------------------------------------------
     // STRUCTS
     // ----------------------------------------------------------
 
     struct Identity {
         bytes32 idHash;   // keccak256(pubKey)
-        bytes   pubKey;   // arbitrary user pubkey bytes
+        bytes   pubKey;   // ECC public key bytes
         bool    exists;
-        string  name;
     }
 
     struct Record {
         address owner;        // patient wallet
         bytes32 h;            // chameleon hash
-        string  encryptedCid; // IPFS CID (encrypted file)
+        string  encryptedCid; // IPFS CID
         bool    consentActive;
-        uint256 timestamp;    // last updated
+        uint256 timestamp;
+    }
+
+    struct Rate {
+        uint32 count;
+        uint64 windowStart;
     }
 
     // ----------------------------------------------------------
@@ -27,30 +32,20 @@ contract AccessRegistry {
 
     bytes32 public DOMAIN_SEPARATOR;
 
-    // Identities
-    mapping(address => Identity) public identities;     // wallet → identity
-    mapping(string  => address) public nameToAddress;   // name → wallet
+    mapping(address => Identity) public identities;
+    mapping(bytes32 => Record)   public records;
+    mapping(address => bytes32[]) public patientRecords;
+    mapping(bytes32 => string[]) public recordHistory;
 
-    // Medical records
-    mapping(bytes32 => Record)    public records;        // recordId → record
-    mapping(address => bytes32[]) public patientRecords; // patient → list of recordIds
-
-    // Redaction history
-    mapping(bytes32 => string[]) public recordHistory;   // recordId → older CIDs
-
-    // Replay + token
-    mapping(bytes32 => bool)   public usedRequest; // EIP-712 request hash used
-    mapping(bytes32 => uint64) public tokenExpiry; // token → expiry
-
-    // Rate limiting per provider
-    struct Rate { uint32 count; uint64 windowStart; }
-    mapping(address => Rate) public rate;
+    mapping(bytes32 => bool)   public usedRequest;
+    mapping(bytes32 => uint64) public tokenExpiry;
+    mapping(address => Rate)   public rate;
 
     // ----------------------------------------------------------
     // EVENTS
     // ----------------------------------------------------------
 
-    event IdentityRegistered(address indexed user, string name, bytes32 idHash);
+    event IdentityRegistered(address indexed user, bytes32 idHash);
     event RecordStored(bytes32 indexed recordId, address indexed owner);
     event RecordUpdated(bytes32 indexed recordId, string newCid);
     event ConsentToggled(address indexed patient, bytes32 indexed recordId, bool active);
@@ -69,11 +64,11 @@ contract AccessRegistry {
     bytes32 public constant EIP712_DOMAIN_TYPEHASH =
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
 
-    // Keep the same typed data as before (role kept for forward compatibility)
     bytes32 public constant REQUEST_TYPEHASH =
-        keccak256("AccessRequest(address provider,address patient,bytes32 recordId,uint8 role,uint64 timestamp,uint256 nonce)");
+        keccak256(
+            "AccessRequest(address provider,address patient,bytes32 recordId,uint8 role,uint64 timestamp,uint256 nonce)"
+        );
 
-    // role = 0 => doctor (kept for compatibility)
     uint8 public constant ROLE_DOCTOR = 0;
 
     // ----------------------------------------------------------
@@ -93,22 +88,25 @@ contract AccessRegistry {
     }
 
     // ----------------------------------------------------------
-    // 1) REGISTER IDENTITY
+    // 1) REGISTER IDENTITY (ONCE PER WALLET)
     // ----------------------------------------------------------
 
-    function registerIdentity(bytes calldata pubKey, string calldata name) external {
-        require(bytes(name).length > 0, "Name required");
+    function registerIdentity(bytes calldata pubKey) external {
+        require(!identities[msg.sender].exists, "Already registered");
 
         bytes32 idHash = keccak256(pubKey);
 
-        identities[msg.sender] = Identity(idHash, pubKey, true, name);
-        nameToAddress[name] = msg.sender;
+        identities[msg.sender] = Identity({
+            idHash: idHash,
+            pubKey: pubKey,
+            exists: true
+        });
 
-        emit IdentityRegistered(msg.sender, name, idHash);
+        emit IdentityRegistered(msg.sender, idHash);
     }
 
     // ----------------------------------------------------------
-    // 2) STORE ENCRYPTED MEDICAL RECORD
+    // 2) STORE MEDICAL RECORD
     // ----------------------------------------------------------
 
     function storeRecord(
@@ -118,6 +116,7 @@ contract AccessRegistry {
         bool consentActive
     ) external {
         require(identities[msg.sender].exists, "Identity missing");
+        require(records[recordId].timestamp == 0, "Record already exists");
 
         records[recordId] = Record({
             owner: msg.sender,
@@ -144,7 +143,6 @@ contract AccessRegistry {
         Record storage r = records[recordId];
         require(r.owner == msg.sender, "Unauthorized");
 
-        // push old CID to history
         recordHistory[recordId].push(r.encryptedCid);
 
         r.h = newH;
@@ -155,35 +153,32 @@ contract AccessRegistry {
     }
 
     // ----------------------------------------------------------
-    // 4) CONSENT Toggle
+    // 4) TOGGLE CONSENT
     // ----------------------------------------------------------
 
     function toggleConsent(bytes32 recordId, bool active) external {
         Record storage r = records[recordId];
         require(r.owner == msg.sender, "Unauthorized");
+
         r.consentActive = active;
+
         emit ConsentToggled(msg.sender, recordId, active);
     }
 
     // ----------------------------------------------------------
-    // 5) ACCESS REQUEST (No ZKP) — EIP-712 signed by doctor
+    // 5) ACCESS REQUEST (EIP-712)
     // ----------------------------------------------------------
-    /**
-     * The doctor (msg.sender) signs the EIP-712 request off-chain.
-     * We verify the sig belongs to msg.sender, ensure consent is active,
-     * protect against replay, then mint a time-limited token.
-     */
+
     function requestAccess(
         address patient,
         bytes32 recordId,
-        uint8 role,          // must be ROLE_DOCTOR (0)
-        uint64 timestamp,    // client timestamp (optional semantics)
-        uint256 nonce,       // unique per request to prevent replay
+        uint8 role,
+        uint64 timestamp,
+        uint256 nonce,
         uint8 v, bytes32 r, bytes32 s,
         uint64 ttlSeconds
-    ) external returns (bytes32 token, uint64 expiresAt)
-    {
-        // Simple per-hour rate limiting for provider (doctor)
+    ) external returns (bytes32 token, uint64 expiresAt) {
+
         Rate storage rl = rate[msg.sender];
         if (block.timestamp - rl.windowStart > 3600) {
             rl.windowStart = uint64(block.timestamp);
@@ -192,11 +187,10 @@ contract AccessRegistry {
         require(rl.count < 10, "Rate limited");
         rl.count++;
 
-        // Build typed data hash
         bytes32 reqHash = keccak256(
             abi.encode(
                 REQUEST_TYPEHASH,
-                msg.sender,   // provider
+                msg.sender,
                 patient,
                 recordId,
                 role,
@@ -204,35 +198,26 @@ contract AccessRegistry {
                 nonce
             )
         );
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, reqHash));
 
-        // Signature must be from the calling doctor
-        address signer = ecrecover(digest, v, r, s);
-        require(signer == msg.sender, "Bad signature");
+        bytes32 digest = keccak256(
+            abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, reqHash)
+        );
 
-        // Replay protection
+        require(ecrecover(digest, v, r, s) == msg.sender, "Bad signature");
         require(!usedRequest[reqHash], "Replay");
-        usedRequest[reqHash] = true;
-
-        // Role check (optional — keep parity with your frontend)
         require(role == ROLE_DOCTOR, "Only doctor allowed");
 
-        // Patient identity must exist
-        Identity memory id = identities[patient];
-        require(id.exists, "No identity");
+        usedRequest[reqHash] = true;
 
-        // Record must exist and belong to patient
+        require(identities[patient].exists, "Patient not registered");
+
         Record memory rec = records[recordId];
         require(rec.owner == patient, "Record owner mismatch");
-
-        // Consent must be active
         require(rec.consentActive, "Consent inactive");
 
-        // Optional: ensure client timestamp isn't absurdly old/new (anti-replay window)
-        // e.g., require(block.timestamp + 5 minutes >= timestamp && timestamp + 15 minutes >= block.timestamp, "Stale/future ts");
-
-        // Mint time-limited token bound to (patient, provider, recordId)
-        token = keccak256(abi.encode(patient, msg.sender, recordId, block.timestamp, nonce));
+        token = keccak256(
+            abi.encode(patient, msg.sender, recordId, block.timestamp, nonce)
+        );
         expiresAt = uint64(block.timestamp + ttlSeconds);
         tokenExpiry[token] = expiresAt;
 
@@ -240,17 +225,12 @@ contract AccessRegistry {
     }
 
     // ----------------------------------------------------------
-    // ✅ VIEW HELPERS
+    // VIEW HELPERS
     // ----------------------------------------------------------
-
-    function getAddressByName(string memory name) external view returns (address) {
-        return nameToAddress[name];
-    }
 
     function getRecordIdByOwner(address patient) external view returns (bytes32) {
         bytes32[] memory lst = patientRecords[patient];
-        if (lst.length == 0) return bytes32(0);
-        return lst[lst.length - 1];
+        return lst.length == 0 ? bytes32(0) : lst[lst.length - 1];
     }
 
     function tokenValid(bytes32 token) external view returns (bool) {
@@ -270,35 +250,5 @@ contract AccessRegistry {
     {
         Record memory r = records[recordId];
         return (r.owner, r.h, r.encryptedCid, r.consentActive, r.timestamp);
-    }
-
-    function getRecordsOf(address patient) external view returns (bytes32[] memory) {
-        return patientRecords[patient];
-    }
-
-    // EIP-712 pieces for debugging
-    function getDomainSeparator() external view returns (bytes32) {
-        return DOMAIN_SEPARATOR;
-    }
-
-    function typeHashAccessRequest() public pure returns (bytes32) {
-        return keccak256(
-            bytes(
-                "AccessRequest(address provider,address patient,bytes32 recordId,uint8 role,uint64 timestamp,uint256 nonce)"
-            )
-        );
-    }
-
-    function debugReqHash(
-        address provider,
-        address patient,
-        bytes32 recordId,
-        uint8 role,
-        uint64 timestamp,
-        uint256 nonce
-    ) external view returns (bytes32 reqHash, bytes32 digest) {
-        bytes32 th = typeHashAccessRequest();
-        reqHash = keccak256(abi.encode(th, provider, patient, recordId, role, timestamp, nonce));
-        digest  = keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, reqHash));
     }
 }

@@ -1,84 +1,84 @@
+// src/pages/Patient.jsx
 import { useState, useEffect } from "react";
 import { API } from "../api/api";
 import "../styling/patient.css";
-import { FaBell, FaUserCircle, FaCloudUploadAlt, FaCheck, FaTimes } from "react-icons/fa";
+import {
+  FaBell,
+  FaUserCircle,
+  FaCloudUploadAlt
+} from "react-icons/fa";
 import { sendTx } from "../pages/TransactionUtils";
 
 export default function Patient() {
   const patientName = localStorage.getItem("name");
+  const wallet = localStorage.getItem("wallet");
+  const pub = localStorage.getItem("pub");
 
-  // UI state
+  /* ---------------- UI STATE ---------------- */
   const [file, setFile] = useState(null);
   const [showDropdown, setShowDropdown] = useState(false);
   const [showRequests, setShowRequests] = useState(false);
   const [requests, setRequests] = useState([]);
   const [consentActive, setConsentActive] = useState(true);
 
-  // Step booleans
+  /* ---------------- PROCESS STATE ---------------- */
   const [encrypting, setEncrypting] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [hashing, setHashing] = useState(false);
   const [storing, setStoring] = useState(false);
+  const [isRedaction, setIsRedaction] = useState(false);
 
-  // runtime
+  /* ---------------- DATA ---------------- */
   const [encBlob, setEncBlob] = useState(null);
-  const [isRedaction, setIsRedaction] = useState(false);   // <—— NEW
-
-  // Last saved details
-  const [cid, setCid]       = useState(localStorage.getItem("last_cid") || "");
-  const [ch, setCh]         = useState(localStorage.getItem("ch") || "");
-  const [rHex, setRHex]     = useState(localStorage.getItem("last_r") || "");
+  const [cid, setCid] = useState(localStorage.getItem("last_cid") || "");
+  const [ch, setCh] = useState(localStorage.getItem("ch") || "");
+  const [rHex, setRHex] = useState(localStorage.getItem("last_r") || "");
   const [recordId, setRecordId] = useState(localStorage.getItem("record_id") || "");
-  const [txHash, setTxHash] = useState("");
 
-  const pub    = localStorage.getItem("pub");
-  const wallet = localStorage.getItem("wallet");
+  const short = (x = "") =>
+    x.length > 12 ? x.slice(0, 6) + "..." + x.slice(-4) : x;
 
-  const short = (a = "") => (a?.length > 12 ? a.slice(0,6) + "..." + a.slice(-4) : a);
-
-  /* --------------------------
-        ACCESS REQUESTS
-  ---------------------------*/
+  /* ======================================================
+     ACCESS REQUESTS (READ-ONLY, ON-CHAIN)
+  ====================================================== */
   const fetchRequests = async () => {
     try {
-      const res = await API.get(`/requests?patient_name=${patientName}`);
+      const res = await API.get(`/requests/patient?email=${localStorage.getItem("email")}`);
       setRequests(res.data.requests || []);
-    } catch {}
+    } catch {
+      setRequests([]);
+    }
   };
+
   useEffect(() => {
     fetchRequests();
   }, []);
 
-  /* =========================
+  /* ======================================================
      STEP 1 — ENCRYPT
-  ========================= */
+  ====================================================== */
   const doEncrypt = async () => {
-    if (!file) return alert("Select a file first.");
-    if (!pub)  return alert("Missing public key");
+    if (!file || !pub) return alert("Missing file or public key");
 
     setEncrypting(true);
     try {
       const form = new FormData();
       form.append("file", file);
-      form.append("public_key_hex", pub);
-      form.append("consent_active", true);
 
-      const res = await API.post("/encrypt", form, { responseType: "blob" });
+      const res = await API.post("/encrypt", form, {
+        responseType: "blob",
+      });
+
       const blob = new Blob([res.data]);
       setEncBlob(blob);
 
-      localStorage.setItem("enc_ready", "1");
-      localStorage.setItem("enc_size", blob.size);
-
-      alert("✅ Encrypted. Now upload to IPFS.\n\nEncrypted file downloaded.");
-
-      // auto-download encrypted
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
       a.download = "encrypted_ehr.enc";
       a.click();
-      a.remove();
+
+      alert("✅ Encrypted successfully");
     } catch {
       alert("❌ Encryption failed");
     } finally {
@@ -86,180 +86,127 @@ export default function Patient() {
     }
   };
 
-  /* =========================
-     STEP 2 — UPLOAD
-  ========================= */
+  /* ======================================================
+     STEP 2 — UPLOAD IPFS
+  ====================================================== */
   const doUploadToIPFS = async () => {
-    if (!encBlob) return alert("Encrypt first!");
+    if (!encBlob) return alert("Encrypt first");
 
     setUploading(true);
     try {
       const form = new FormData();
-      form.append("file", encBlob, "encrypted_ehr.enc");
+      form.append("file", encBlob);
 
       const res = await API.post("/ipfs-upload", form);
-      const newCid = res.data.cid;
-      setCid(newCid);
+      setCid(res.data.cid);
+      localStorage.setItem("last_cid", res.data.cid);
 
-      localStorage.setItem("last_cid", newCid);
-      alert(`✅ Uploaded to IPFS\nCID: ${newCid}`);
+      alert("✅ Uploaded to IPFS");
     } catch {
-      alert("❌ Upload failed");
+      alert("❌ IPFS upload failed");
     } finally {
       setUploading(false);
     }
   };
 
-  /* =========================
-     STEP 3 — CH
-  ========================= */
+  /* ======================================================
+     STEP 3 — CHAMELEON HASH
+  ====================================================== */
   const doChameleonHash = async () => {
     if (!cid) return alert("Upload to IPFS first");
 
     setHashing(true);
     try {
       const form = new FormData();
-      form.append("cid", cid);
       form.append("public_key_hex", pub);
 
-      const res = await API.post(`/chameleon-hash/${cid}`, form)
-      const chx = res.data.ch;
-      const r   = res.data.r;
+      const res = await API.post(`/chameleon-hash/${cid}`, form);
+      setCh(res.data.ch);
+      setRHex(res.data.r);
 
-      setCh(chx);
-      setRHex(r);
+      localStorage.setItem("ch", res.data.ch);
+      localStorage.setItem("last_r", res.data.r);
 
-      localStorage.setItem("ch", chx);
-      localStorage.setItem("last_r", r);
-
-      alert(`✅ CH computed\nHash: ${chx}\nr: ${r}`);
+      alert("✅ Hash generated");
     } catch {
-      alert("❌ CH compute failed");
+      alert("❌ Hash failed");
     } finally {
       setHashing(false);
     }
   };
 
-  /* =========================
-     STEP 4 — STORE
-  ========================= */
-const doStoreOnChain = async () => {
-  if (!wallet) return alert("Connect wallet first");
-  if (!cid || !ch || !rHex) return alert("Complete previous steps");
+  /* ======================================================
+     STEP 4 — STORE / REDACT
+  ====================================================== */
+  const doStoreOnChain = async () => {
+    if (!wallet || !cid || !ch) return;
 
-  setStoring(true);
-  try {
-    let res;
+    setStoring(true);
+    try {
+      let res;
+      if (isRedaction) {
+        const form = new FormData();
+        form.append("file", encBlob);
+        form.append("old_cid", localStorage.getItem("last_cid"));
+        form.append("old_r_hex", localStorage.getItem("last_r"));
+        form.append("c_hash", localStorage.getItem("ch"));
+        form.append("public_key_hex", pub);
+        form.append("private_key_hex", localStorage.getItem("priv"));
+        form.append("record_id", recordId);
+        form.append("eth_address", wallet);
+        form.append("consent_active", "true");
 
-    /* =========================
-        REDACTION FLOW
-    ========================= */
-    if (isRedaction) {
-      if (!encBlob) return alert("Please encrypt the revised PDF first.");
+        res = await API.post("/redact", form);
+      } else {
+        const form = new FormData();
+        form.append("cid", cid);
+        form.append("ch", ch);
+        form.append("eth_address", wallet);
 
+        res = await API.post("/store-record", form);
+        setRecordId(res.data.record_id);
+        localStorage.setItem("record_id", res.data.record_id);
+      }
+
+      const txHash = await sendTx(res.data.tx_data);
+      alert(`✅ Stored on-chain\nTx: ${txHash}`);
+      setIsRedaction(false);
+    } catch {
+      alert("❌ Blockchain store failed");
+    } finally {
+      setStoring(false);
+    }
+  };
+
+  /* ======================================================
+     CONSENT TOGGLE
+  ====================================================== */
+  const toggleConsent = async () => {
+    if (!recordId) return;
+
+    try {
       const form = new FormData();
-      form.append("file", encBlob, "encrypted_ehr.enc");
-      form.append("old_cid", localStorage.getItem("last_cid") || "");
-      form.append("old_r_hex", localStorage.getItem("last_r") || "");
-      form.append("c_hash", localStorage.getItem("ch") || "");
-      form.append("public_key_hex", pub || "");
-      form.append("private_key_hex", localStorage.getItem("priv") || "");
       form.append("record_id", recordId);
       form.append("eth_address", wallet);
-      form.append("consent_active", "true");
+      form.append("active", !consentActive);
 
-      res = await API.post("/redact", form);
+      const res = await API.post("/toggle-consent", form);
+      await sendTx(res.data.tx_data);
 
-      // update state
-      if (res.data.new_cid) {
-        setCid(res.data.new_cid);
-        localStorage.setItem("last_cid", res.data.new_cid);
-      }
-      if (res.data.new_r) {
-        setRHex(res.data.new_r);
-        localStorage.setItem("last_r", res.data.new_r);
-      }
-      if (res.data.new_ch_hash) {
-        setCh(res.data.new_ch_hash);
-        localStorage.setItem("ch", res.data.new_ch_hash);
-      }
-      if (res.data.record_id) {
-        setRecordId(res.data.record_id);
-        localStorage.setItem("record_id", res.data.record_id);
-      }
+      setConsentActive(!consentActive);
+    } catch {
+      alert("❌ Consent toggle failed");
     }
+  };
 
-    /* =========================
-         INITIAL STORAGE FLOW
-    ========================= */
-    else {
-      const form = new FormData();
-      form.append("cid", cid);
-      form.append("ch", ch);
-      form.append("eth_address", wallet);
+  /* ======================================================
+     VIEW EHR
+  ====================================================== */
+  const viewEHR = async () => {
+   try {
+      if (!cid) return alert("No CID stored");
 
-      res = await API.post("/store-record", form);
-
-      if (res.data.record_id) {
-        setRecordId(res.data.record_id);
-        localStorage.setItem("record_id", res.data.record_id);
-      }
-    }
-
-    /* =========================
-          SEND TX
-    ========================= */
-    const txData = res.data.tx_data;
-    if (txData) {
-      const hash = await sendTx(txData);
-      setTxHash(hash);
-      alert(`TX Hash: ${hash}`);
-    }
-
-    setIsRedaction(false);
-  } catch (e) {
-    console.error("Store failed", e);
-    alert("❌ Store failed");
-  } finally {
-    setStoring(false);
-  }
-};
-
-const toggleConsent = async () => {
-  if (!recordId || !wallet) return alert("No record found");
-
-  try {
-    const form = new FormData();
-    form.append("record_id", recordId);
-    form.append("eth_address", wallet);
-    form.append("active", consentActive ? "false" : "true");
-
-    const res = await API.post("/toggle-consent", form);
-    const txData = res.data.tx_data;
-
-    if (txData) {
-      const txHash = await sendTx(txData);
-      setTxHash(txHash);
-      alert(`TX Hash: ${txHash}`);
-    }
-
-    setConsentActive(!consentActive);
-  } catch (e) {
-    console.error("Toggle failed", e);
-    alert("❌ Failed toggling consent");
-  }
-};
-
-
-  /* =========================
-     VIEW
-  ========================= */
-  const view = async () => {
-    try {
-      const currentCid = localStorage.getItem("last_cid");
-      if (!currentCid) return alert("No CID stored");
-
-      const res = await API.get(`/download/${currentCid}`, { responseType: "blob" });
+      const res = await API.get(`/download/${cid}`, { responseType: "blob" });
       console.log(res);
       const blob = res.data;
 
@@ -280,227 +227,81 @@ const toggleConsent = async () => {
     }
   };
 
-  /* =========================
-     STEP MACHINE
-  ========================= */
-  const step = (() => {
-    if (recordId) return "done";
-    if (!encBlob) return "encrypt";
-    if (!cid)    return "upload";
-    if (!ch || !rHex) return "hash";
-    if (!recordId)    return "store";
-    return "done";
-  })();
+  /* ======================================================
+     STEP LOGIC
+  ====================================================== */
+  const step =
+    recordId ? "done" :
+    !encBlob ? "encrypt" :
+    !cid ? "upload" :
+    !ch ? "hash" :
+    "store";
 
   const handleStep = () => {
     if (step === "encrypt") return doEncrypt();
-    if (step === "upload")  return doUploadToIPFS();
-    if (step === "hash")    return doChameleonHash();
-    if (step === "store")   return doStoreOnChain();
+    if (step === "upload") return doUploadToIPFS();
+    if (step === "hash") return doChameleonHash();
+    if (step === "store") return doStoreOnChain();
   };
 
-  const stepLabel = (() => {
-    switch(step) {
-      case "encrypt": return encrypting ? "Encrypting..." : "Encrypt EHR";
-      case "upload":  return uploading  ? "Uploading..." : "Upload to IPFS";
-      case "hash":    return hashing   ? "Computing..." : "Compute Chameleon Hash";
-      case "store":   return storing   ? "Storing..."   : "Store On-Chain";
-      default: return "Continue";
-    }
-  })();
-
-  /* ---- Redact restarts process ---- */
-  const startRedact = () => {
-    setIsRedaction(true);
-    setEncBlob(null);
-    setCid("");
-    setCh("");
-    setRHex("");
-    setTxHash("");
-    setRecordId("");
-  };
-
-  /* =========================
-     REQUEST UI
-  ========================= */
-  const toggleRequests = () => {
-    setShowRequests(prev => {
-      if (!prev) fetchRequests();
-      return !prev;
-    });
-    setShowDropdown(false);
-  };
-
-  const toggleDropdown = () => {
-    setShowDropdown(!showDropdown);
-    setShowRequests(false);
-  };
-
-  const handleLogout = () => {
-    window.location.href = "/";
-  };
-
-  const approveRequest = async (doctor_id, doctor_name) => {
-    try {
-      const form = new FormData();
-      form.append("patient_id", patientName);
-      form.append("doctor_id", doctor_id);
-      await API.post("/approve", form);
-      alert(`✅ Approved: Dr. ${doctor_name}`);
-      fetchRequests();
-    } catch {
-      alert("❌ Failed approving");
-    }
-  };
-
-  const rejectRequest = async (doctor_id, doctor_name) => {
-    try {
-      const form = new FormData();
-      form.append("patient_id", patientName);
-      form.append("doctor_id", doctor_id);
-      await API.post("/reject", form);
-      alert(`❌ Rejected: Dr. ${doctor_name}`);
-      fetchRequests();
-    } catch {
-      alert("❌ Failed rejecting");
-    }
-  };
-
-  /* =========================
+  /* ======================================================
      RENDER
-  ========================= */
+  ====================================================== */
   return (
     <div className="patient-wrapper">
-      {/* HEADER */}
       <header className="patient-header">
-        <div className="left-group">
-          <h2 className="app-name">EHRChain</h2>
+        <h2>EHRChain</h2>
+
+        <div className="bell" onClick={() => setShowRequests(!showRequests)}>
+          <FaBell />
+          {requests.length > 0 && <span className="badge">{requests.length}</span>}
         </div>
 
-        <div className="right-group">
-          <div className="bell" onClick={toggleRequests}>
-            <FaBell size={26} />
-            {requests.length > 0 && <span className="badge">{requests.length}</span>}
-          </div>
-
-          {showRequests && (
-            <div className="requests-popup">
-              <h3>Access Requests</h3>
-              {requests.length === 0
-                ? <p>No pending requests ✅</p>
-                : requests.map((req, i) => {
-                    const expires = new Date(req.expiresAt * 1000).toLocaleString();
-                    return (
-                      <div className="request-item-card" key={i}>
-                        <div className="req-row">
-                          <span className="label">Doctor:</span>
-                          <span className="value">{req.doctor}</span>
-                        </div>
-                        <div className="req-row">
-                          <span className="label">Record:</span>
-                          <span className="value">{short(req.record_id)}</span>
-                        </div>
-                        <div className="req-row">
-                          <span className="label">Token:</span>
-                          <span className="value">{short(req.token)}</span>
-                        </div>
-                        <div className="req-row">
-                          <span className="label">Status:</span>
-                          <span className={`status ${req.status}`}>
-                            {req.status}
-                          </span>
-                        </div>
-                        <div className="req-row">
-                          <span className="label">Expires:</span>
-                          <span className="value">{expires}</span>
-                        </div>
-
-                        {req.status === "pending" && (
-                          <div className="req-actions">
-                            <FaCheck className="approve" onClick={() => approveRequest(req.doctor, req.doctor_name)} />
-                            <FaTimes className="reject" onClick={() => rejectRequest(req.doctor, req.doctor_name)} />
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })
-              }
-            </div>
-          )}
-
-          <div className="user-info" onClick={toggleDropdown}>
-            <FaUserCircle size={26} />
-            <span>{patientName}</span>
-          </div>
-
-          {showDropdown && (
-            <div className="dropdown-menu">
-              <button onClick={handleLogout}>Logout</button>
-            </div>
-          )}
+        <div className="user-info" onClick={() => setShowDropdown(!showDropdown)}>
+          <FaUserCircle />
+          <span>{patientName}</span>
         </div>
       </header>
 
-      {/* MAIN */}
+      {showRequests && (
+        <div className="requests-popup">
+          <h3>Access Logs</h3>
+          {requests.map((r, i) => (
+            <div key={i} className="request-item-card">
+              <p>Doctor: {r.doctor}</p>
+              <p>Status: {r.status}</p>
+              <p>Token: {short(r.token)}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="patient-main">
-        <h1>Welcome, {patientName}!</h1>
-        <p>Securely manage your health records using blockchain.</p>
+        <h1>Welcome, {patientName}</h1>
 
         <div className="upload-card">
-          <FaCloudUploadAlt className="upload-icon" />
+          <FaCloudUploadAlt />
+          {step === "encrypt" && <input type="file" onChange={(e) => setFile(e.target.files[0])} />}
 
-          {/* single changing title */}
-          {step === "encrypt" && <h3>1) Encrypt EHR for better safety</h3>}
-          {step === "upload"  && <h3>2) Upload to IPFS (off-chain)</h3>}
-          {step === "hash"    && <h3>3) Compute Chameleon Hash (Mandatory)</h3>}
-          {step === "store"   && <h3>4) Store on Chain</h3>}
-          {step === "done"    && <h3>✅ Stored latest EHR on blockchain</h3>}
-
-          {step === "encrypt" && (
-            <input
-              type="file"
-              onChange={(e) => setFile(e.target.files[0])}
-            />
-          )}
-
-          {/* single action button until done */}
           {step !== "done" && (
-            <button
-              className="upload-btn"
-              onClick={handleStep}
-              disabled={
-                (step === "encrypt" && (!file || !pub)) ||
-                (step === "upload"  && !encBlob) ||
-                (step === "hash"    && !cid) ||
-                (step === "store"   && (!cid || !ch || !rHex || !wallet))
-              }
-            >
-              {stepLabel}
+            <button className="upload-btn" onClick={handleStep}>
+              {step.toUpperCase()}
             </button>
           )}
 
-          {/* once done → show view + redact */}
           {step === "done" && (
-  <>
-    <button className="upload-btn" onClick={view}>
-      View EHR
-    </button>
-
-    <button className="upload-btn" onClick={startRedact}>
-      Edit / Redact EHR
-    </button>
-
-    {/* ✅ NEW BUTTON */}
-    <button
-      className="upload-btn"
-      style={{ backgroundColor: consentActive ? "#f33" : "#3c3" }}
-      onClick={toggleConsent}
-    >
-      {consentActive ? "Disable Consent" : "Enable Consent"}
-    </button>
-  </>
-)}
-
+            <>
+              <button className="upload-btn" onClick={viewEHR}>View EHR</button>
+              <button className="upload-btn" onClick={() => setIsRedaction(true)}>Redact</button>
+              <button
+                className="upload-btn"
+                style={{ background: consentActive ? "#f33" : "#3c3" }}
+                onClick={toggleConsent}
+              >
+                {consentActive ? "Disable Consent" : "Enable Consent"}
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>
