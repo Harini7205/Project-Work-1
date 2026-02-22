@@ -21,7 +21,8 @@ from blockchain_utils import (
     fetch_access_logs_for_patient,
     fetch_access_logs_for_doctor,
     check_token_valid,
-    toggle_consent_tx
+    toggle_consent_tx,
+    is_identity_registered
 )
 from dotenv import load_dotenv
 import os
@@ -67,36 +68,107 @@ def request_otp(email: str = Form(...)):
         s.send_message(msg)
 
     return {"message": "OTP sent"}
-
 @router.post("/auth/verify-otp")
 def verify_otp(
     email: str = Form(...),
-    otp: str = Form(...),
+    otp: str = Form(...)
+):
+    db = get_db()
+
+    row = db.execute(
+        "SELECT code, expires FROM otp WHERE email=?",
+        (email,)
+    ).fetchone()
+
+    if not row or row[0] != otp or row[1] < time.time():
+        raise HTTPException(status_code=401, detail="Invalid OTP")
+
+    # OTP is valid → mark verified
+    db.execute(
+        "UPDATE otp SET expires=0 WHERE email=?",
+        (email,)
+    )
+    db.commit()
+
+    return {
+        "message": "OTP verified",
+        "email": email
+    }
+
+@router.post("/auth/register")
+def register(
+    email: str = Form(...),
+    wallet: str = Form(...),
+    role: str = Form(...)
+):
+    if role not in ("patient", "doctor", "admin"):
+        raise HTTPException(400, "Invalid role")
+
+    db = get_db()
+
+    # ❌ Do not allow duplicate users
+    if db.execute(
+        "SELECT 1 FROM users WHERE email=?",
+        (email,)
+    ).fetchone():
+        raise HTTPException(409, "User already registered")
+
+    import uuid
+    patient_id = None
+
+    if role == "patient":
+        patient_id = "PID-" + uuid.uuid4().hex[:10].upper()
+
+    db.execute("""
+        INSERT INTO users
+        (email, wallet, role, patient_id, verified, created_at)
+        VALUES (?,?,?,?,1,?)
+    """, (
+        email,
+        wallet.lower(),
+        role,
+        patient_id,
+        int(time.time())
+    ))
+
+    db.commit()
+
+    return {
+        "message": "Registration successful",
+        "role": role,
+        "patient_id": patient_id
+    }
+
+@router.post("/auth/login")
+def login(
+    email: str = Form(...),
     wallet: str = Form(...),
     role: str = Form(...)
 ):
     db = get_db()
-    row = db.execute(
-        "SELECT code, expires FROM otp WHERE email=?", (email,)
-    ).fetchone()
 
-    if not row or row[0] != otp or row[1] < time.time():
-        raise HTTPException(401, "Invalid OTP")
+    user = db.execute("""
+        SELECT role, patient_id FROM users
+        WHERE email=?
+    """, (email,)).fetchone()
+
+    if not user:
+        raise HTTPException(401, "Invalid credentials")
     
-    import uuid
+    if role != user[0]:
+        raise HTTPException(400,"Invalid role")
 
-    patient_id = "PID-" + uuid.uuid4().hex[:10].upper()
+    return {
+        "message": "Login successful",
+        "role": user[0],
+        "patient_id": user[1]
+    }
 
-
-    db.execute("""
-INSERT OR REPLACE INTO users(patient_id, email, wallet, role, verified)
-VALUES (?,?,?,?,1)
-""", (patient_id, email, wallet, role))
-
-    db.execute("DELETE FROM otp WHERE email=?", (email,))
-    db.commit()
-
-    return {"message": "Login successful"}
+@router.get("/identity/registered")
+def identity_registered(wallet: str):
+    return {
+        "registered": is_identity_registered(wallet)
+    }
 
 # ======================================================
 # KEY GENERATION

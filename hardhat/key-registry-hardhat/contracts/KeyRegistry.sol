@@ -251,4 +251,12 @@ contract AccessRegistry {
         Record memory r = records[recordId];
         return (r.owner, r.h, r.encryptedCid, r.consentActive, r.timestamp);
     }
+
+    // ----------------------------------------------------------
+    // VIEW: CHECK IF IDENTITY IS REGISTERED
+    // ----------------------------------------------------------
+    function isRegistered(address user) external view returns (bool) {
+        return identities[user].exists;
+    }
 }
+

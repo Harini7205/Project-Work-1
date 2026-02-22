@@ -1,5 +1,5 @@
 [
-  {
+    {
       "inputs": [],
       "stateMutability": "nonpayable",
       "type": "constructor"
@@ -256,6 +256,25 @@
         {
           "internalType": "bool",
           "name": "exists",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "user",
+          "type": "address"
+        }
+      ],
+      "name": "isRegistered",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
           "type": "bool"
         }
       ],
@@ -576,4 +595,4 @@
       "stateMutability": "view",
       "type": "function"
     }
-]
+  ]

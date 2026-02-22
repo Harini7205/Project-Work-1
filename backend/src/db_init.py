@@ -6,13 +6,18 @@ def init_db():
 
     cur.execute("""
     CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        patient_id TEXT UNIQUE,
-        email TEXT UNIQUE,
-        wallet TEXT UNIQUE,
-        role TEXT,
-        verified INTEGER DEFAULT 0
-    )
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+    email TEXT UNIQUE NOT NULL,
+    wallet TEXT UNIQUE NOT NULL,
+
+    role TEXT CHECK(role IN ('patient','doctor','admin')) NOT NULL,
+
+    patient_id TEXT UNIQUE,     -- only for patients
+    verified INTEGER DEFAULT 0,
+
+    created_at INTEGER
+)
     """)
 
     cur.execute("""

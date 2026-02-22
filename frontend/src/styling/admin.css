@@ -1,0 +1,134 @@
+/* ===================== GLOBAL ===================== */
+
+.admin-wrapper {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #eef3ff, #f8fbff);
+  font-family: "Segoe UI", sans-serif;
+}
+
+/* ===================== HEADER ===================== */
+
+.admin-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 35px;
+  background: white;
+  border-bottom: 1px solid #e3ebff;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.admin-title {
+  font-size: 26px;
+  font-weight: 700;
+  color: #1e3a8a;
+}
+
+.admin-wallet {
+  font-size: 14px;
+  color: #555;
+  background: #eef2ff;
+  padding: 6px 12px;
+  border-radius: 8px;
+}
+
+/* ===================== MAIN ===================== */
+
+.admin-main {
+  padding: 40px;
+  text-align: center;
+}
+
+.admin-main h1 {
+  font-size: 32px;
+  color: #1e293b;
+  margin-bottom: 10px;
+}
+
+.admin-subtitle {
+  color: #64748b;
+  margin-bottom: 30px;
+}
+
+/* ===================== CARD ===================== */
+
+.admin-card {
+  width: 500px;
+  margin: auto;
+  background: white;
+  border-radius: 18px;
+  padding: 30px;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.08);
+  border: 1px solid #e5edff;
+}
+
+/* ===================== STEPS ===================== */
+
+.step {
+  margin-bottom: 25px;
+  text-align: left;
+}
+
+.step h3 {
+  color: #2563eb;
+  margin-bottom: 8px;
+}
+
+.step p {
+  font-size: 14px;
+  color: #64748b;
+  margin-bottom: 8px;
+}
+
+/* ===================== INPUT ===================== */
+
+.admin-card input {
+  width: 100%;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #dbe4ff;
+}
+
+/* ===================== BUTTON ===================== */
+
+.admin-btn {
+  width: 100%;
+  padding: 12px;
+  border: none;
+  background: #2563eb;
+  color: white;
+  border-radius: 10px;
+  font-size: 15px;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.admin-btn:hover {
+  background: #1e40af;
+}
+
+/* ===================== DATA BOX ===================== */
+
+.data-box {
+  margin-top: 20px;
+  padding: 15px;
+  background: #f8faff;
+  border-radius: 10px;
+  font-size: 14px;
+  border: 1px solid #e0e7ff;
+}
+
+.data-box p {
+  margin: 5px 0;
+  word-wrap: break-word;
+}
+
+/* ===================== STATUS ===================== */
+
+.status-success {
+  color: green;
+}
+
+.status-pending {
+  color: orange;
+}

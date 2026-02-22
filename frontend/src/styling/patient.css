@@ -1,304 +1,123 @@
-/* Same soft background theme */
+/* ===================== GLOBAL ===================== */
+
 .patient-wrapper {
   min-height: 100vh;
-  background: linear-gradient(145deg, #dfe8ff, #f7faff);
-  animation: fadeIn 0.6s ease-in;
+  background: linear-gradient(135deg, #f6f9ff, #eef4ff);
+  font-family: "Segoe UI", sans-serif;
 }
 
-/* Fade-in animation */
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(12px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-/* ===================== HEADER ====================== */
+/* ===================== HEADER ===================== */
 
 .patient-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 18px 30px;
-  background: #ffffffcc;
-  backdrop-filter: blur(8px);
-  border-bottom: 1px solid #d3dfff;
-  position: relative;
-}
-
-.left-group, .right-group {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-}
-
-.app-name {
-  font-size: 28px;
-  font-weight: 800;
-  color: #243b6b;
-}
-
-/* Bell icon */
-.bell {
-  position:relative;
-  padding-top: 2px;
-  cursor: pointer;
-  color: #243b6b;
-  transition: 0.25s ease;
-}
-
-.bell:hover {
-  transform: scale(1.1);
-  color:#4568dc;
-}
-
-.badge {
-  position: absolute;
-  top: -6px;
-  right: -6px;
-  background: #ff3b30;
-  color: white;
-  font-size: 11px;
-  padding: 2px 6px;
-  border-radius: 50%;
-  font-weight: bold;
-  min-width: 18px;
-  height: 18px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
-/* User info and dropdown */
-.user-info {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  color: #243b6b;
-  font-weight: 600;
-}
-
-.dropdown-menu {
-  position: absolute;
-  top: 65px;
-  right: 25px;
+  padding: 18px 35px;
   background: white;
-  border: 1px solid #e4e9ff;
-  border-radius: 12px;
-  padding: 10px;
-  width: 130px;
-  box-shadow: 0 12px 28px rgba(120,136,255,0.18);
-  animation: scaleIn 0.25s ease;
+  border-bottom: 1px solid #e3ebff;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
 }
 
-.dropdown-menu button {
-  width: 100%;
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 15px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  color: #243b6b;
-}
-
-.dropdown-menu button:hover {
-  background: #eef2ff;
-}
-
-/* scale animation */
-@keyframes scaleIn {
-  from { transform: scale(0.9); opacity: 0 }
-  to   { transform: scale(1); opacity: 1 }
-}
-
-/* ================== REQUEST POPUP =================== */
-
-.requests-popup {
-  position: absolute;
-  top: 65px;
-  right: 15px;
-  background: white;
-  border-radius: 14px;
-  box-shadow: 0 12px 28px rgba(120,136,255,0.18);
-  padding: 18px 20px;
-  width: 330px;
-  z-index: 200;
-  animation: scaleIn 0.25s ease;
-  border: 1px solid #e4e9ff;
-}
-
-.requests-popup h3 {
-  font-size: 18px;
+.patient-title {
+  font-size: 26px;
   font-weight: 700;
-  color: #243b6b;
-  margin-bottom: 10px;
+  color: #1e3a8a;
 }
 
-.request-item {
-  display: flex;
-  justify-content: space-between;
-  padding: 10px 0;
-  border-bottom: 1px solid #e7edff;
-}
-
-.req-actions {
-  display: flex;
-  gap: 12px;
-}
-
-.approve {
-  color: #2b8a3e;
-  cursor: pointer;
-  transition: 0.2s ease;
-}
-
-.approve:hover {
-  transform: scale(1.2);
-}
-
-.reject {
-  color: #d33;
-  cursor: pointer;
-  transition: 0.2s ease;
-}
-
-.reject:hover {
-  transform: scale(1.2);
-}
-
-/* ===================== MAIN ====================== */
-
-.patient-main {
-  text-align: center;
-  margin-top: 60px;
-  padding: 0 20px;
-  animation: fadeInUp 0.6s ease-in;
-}
-
-@keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(18px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-.patient-main h1 {
-  font-size: 38px;
-  font-weight: 800;
-  color: #1b2e52;
-  margin-bottom: 10px;
-}
-
-.patient-main p {
-  font-size: 18px;
-  color: #4f5f82;
-  max-width: 650px;
-  margin: auto;
-}
-
-/* =================== Upload Card =================== */
-
-.upload-card {
-  margin: 40px auto 0;
-  width: 360px;
-  background: white;
-  padding: 32px 28px;
-  border-radius: 18px;
-  box-shadow: 0 12px 28px rgba(120,136,255,0.18);
-  border: 1px solid #e6ecff;
-  text-align: center;
-  animation: fadeInUp 0.6s ease;
-}
-
-.upload-icon {
-  font-size: 90px;
-  color: #4568dc;
-  margin-bottom: 18px;
-  animation: float 3s infinite ease-in-out;
-}
-
-/* Float animation */
-@keyframes float {
-  0%   { transform: translateY(0px); }
-  50%  { transform: translateY(-6px); }
-  100% { transform: translateY(0px); }
-}
-
-.upload-card input {
-  margin-top: 12px;
+.patient-user {
   font-size: 15px;
-}
-
-.upload-btn {
-  margin-top: 18px;
-  background: #3b6fff;
-  color: white;
-  border: none;
-  padding: 12px 18px;
-  border-radius: 10px;
-  font-size: 16px;
-  cursor: pointer;
-  width: 100%;
-  transition: 0.25s ease;
-}
-
-.upload-btn:hover {
-  background: #234fdd;
-}
-
-.request-item-card {
-  background: #ffffff;
-  border-radius: 10px;
-  padding: 12px 14px;
-  margin-bottom: 10px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
-  font-size: 14px;
-}
-
-.req-row {
-  display: flex;
-  justify-content: space-between;
-  margin: 4px 0;
-}
-
-.label {
-  font-weight: 600;
   color: #444;
 }
 
-.value {
-  font-family: monospace;
-  color: #222;
+/* ===================== MAIN ===================== */
+
+.patient-main {
+  padding: 40px;
+  text-align: center;
 }
 
-.status {
-  font-weight: bold;
-  text-transform: capitalize;
+.patient-main h1 {
+  font-size: 32px;
+  color: #1e293b;
 }
 
-.status.approved {
-  color: green;
+.patient-sub {
+  color: #64748b;
+  margin-bottom: 30px;
 }
 
-.status.pending {
-  color: #d9b200;
-}
+/* ===================== CARDS ===================== */
 
-.status.rejected {
-  color: red;
-}
-
-.req-actions {
+.patient-container {
   display: flex;
-  justify-content: flex-end;
-  margin-top: 8px;
-  gap: 12px;
+  justify-content: center;
+  gap: 25px;
+  flex-wrap: wrap;
 }
 
-.approve {
+/* ===================== CARD ===================== */
+
+.patient-card {
+  width: 320px;
+  background: white;
+  border-radius: 16px;
+  padding: 25px;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.08);
+  border: 1px solid #e5edff;
+  text-align: left;
+}
+
+.patient-card h3 {
+  color: #2563eb;
+  margin-bottom: 12px;
+}
+
+/* ===================== BUTTON ===================== */
+
+.patient-btn {
+  width: 100%;
+  padding: 10px;
+  background: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  margin-top: 10px;
+  transition: 0.2s;
+}
+
+.patient-btn:hover {
+  background: #1e40af;
+}
+
+/* ===================== INPUT ===================== */
+
+.patient-card input {
+  width: 100%;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #dbe4ff;
+  margin-bottom: 10px;
+}
+
+/* ===================== HOSPITAL LIST ===================== */
+
+.hospital {
+  background: #f1f5ff;
+  padding: 8px;
+  border-radius: 6px;
+  margin-top: 6px;
+  font-size: 14px;
+}
+
+/* ===================== CONSENT ===================== */
+
+.consent-active {
   color: green;
-  cursor: pointer;
+  font-weight: bold;
 }
 
-.reject {
+.consent-inactive {
   color: red;
-  cursor: pointer;
+  font-weight: bold;
 }

@@ -244,3 +244,9 @@ def fetch_access_logs_for_patient(patient: str):
             registry.events.AccessRequested().process_log, logs
         )
     ]
+
+def is_identity_registered(user: str) -> bool:
+    contract = _load_contract()  # AccessRegistry
+    return contract.functions.isRegistered(
+        Web3.to_checksum_address(user)
+    ).call()
