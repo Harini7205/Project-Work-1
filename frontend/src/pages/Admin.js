@@ -1,151 +1,273 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { API } from "../api/api";
 import "../styling/admin.css";
 import { sendTx } from "./TransactionUtils";
 
 export default function Admin() {
 
-  const wallet = localStorage.getItem("wallet");
-  const pub = localStorage.getItem("pub");
+  const [wallet, setWallet] = useState(localStorage.getItem("wallet"));
+  const [pub, setPub] = useState(localStorage.getItem("pub"));
 
   const [file, setFile] = useState(null);
   const [encBlob, setEncBlob] = useState(null);
+
   const [cid, setCid] = useState("");
   const [ch, setCh] = useState("");
-  const [rHex, setRHex] = useState("");
   const [recordId, setRecordId] = useState("");
 
-  const [encrypting, setEncrypting] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [hashing, setHashing] = useState(false);
-  const [storing, setStoring] = useState(false);
+  const [step, setStep] = useState(1);
 
-  // STEP 1 - Encrypt
+  const [patients, setPatients] = useState([]);
+  const [showPatients, setShowPatients] = useState(false);
+
+  /* AUTO KEY GENERATION */
+  useEffect(() => {
+    const generateKeys = async () => {
+      if (!pub) {
+        try {
+          const res = await fetch("http://127.0.0.1:8000/ehr/generate-keys", {
+            method: "POST",
+          });
+
+          const data = await res.json();
+
+          localStorage.setItem("pub", data.public_key);
+          localStorage.setItem("priv", data.private_key);
+
+          setPub(data.public_key);
+        } catch {
+          alert("Key generation failed");
+        }
+      }
+    };
+
+    generateKeys();
+  }, [pub]);
+
+  /* CONNECT WALLET */
+  const connectWallet = async () => {
+    if (!window.ethereum) {
+      alert("Install MetaMask");
+      return null;
+    }
+
+    const accounts = await window.ethereum.request({
+      method: "eth_requestAccounts",
+    });
+
+    const address = accounts[0];
+    localStorage.setItem("wallet", address);
+    setWallet(address);
+
+    return address;
+  };
+
+  /* STEP 1 ENCRYPT */
   const doEncrypt = async () => {
-    if (!file || !pub) return alert("Missing file or public key");
+    if (!file) return alert("Choose file");
 
-    setEncrypting(true);
-    try {
-      const form = new FormData();
-      form.append("file", file);
+    const form = new FormData();
+    form.append("file", file);
 
-      const res = await API.post("/encrypt", form, {
-        responseType: "blob",
-      });
+    const res = await API.post("/encrypt", form, {
+      responseType: "blob",
+    });
 
-      const blob = new Blob([res.data]);
-      setEncBlob(blob);
-
-      alert("Encrypted successfully");
-    } catch {
-      alert("Encryption failed");
-    }
-    setEncrypting(false);
+    setEncBlob(new Blob([res.data]));
+    setStep(2);
   };
 
-  // STEP 2 - Upload
+  /* STEP 2 UPLOAD */
   const doUpload = async () => {
-    if (!encBlob) return alert("Encrypt first");
+    const form = new FormData();
+    form.append("file", encBlob, "encrypted.bin");
 
-    setUploading(true);
-    try {
-      const form = new FormData();
-      form.append("file", encBlob);
+    const res = await API.post("/ipfs-upload", form);
 
-      const res = await API.post("/ipfs-upload", form);
-      setCid(res.data.cid);
-
-      alert("Uploaded to IPFS");
-    } catch {
-      alert("Upload failed");
-    }
-    setUploading(false);
+    setCid(res.data.cid);
+    setStep(3);
   };
 
-  // STEP 3 - Hash
+  /* STEP 3 HASH */
   const doHash = async () => {
-    if (!cid) return alert("Upload first");
+    const form = new FormData();
+    form.append("public_key_hex", pub);
 
-    setHashing(true);
-    try {
-      const form = new FormData();
-      form.append("public_key_hex", pub);
+    const res = await API.post(`/chameleon-hash/${cid}`, form);
 
-      const res = await API.post(`/chameleon-hash/${cid}`, form);
-
-      setCh(res.data.ch);
-      setRHex(res.data.r);
-
-      alert("Hash generated");
-    } catch {
-      alert("Hash failed");
-    }
-    setHashing(false);
+    setCh(res.data.ch);
+    setStep(4);
   };
 
-  // STEP 4 - Store
+  /* STEP 4 STORE */
   const doStore = async () => {
-    if (!cid || !ch || !wallet) return alert("Missing data");
 
-    setStoring(true);
-    try {
-      const form = new FormData();
-      form.append("cid", cid);
-      form.append("ch", ch);
-      form.append("eth_address", wallet);
+    let currentWallet = wallet;
 
-      const res = await API.post("/store-record", form);
-
-      setRecordId(res.data.record_id);
-
-      const txHash = await sendTx(res.data.tx_data);
-
-      alert("Stored on blockchain\nTx: " + txHash);
-
-    } catch {
-      alert("Store failed");
+    if (!currentWallet) {
+      currentWallet = await connectWallet();
+      if (!currentWallet) return;
     }
-    setStoring(false);
+
+    const form = new FormData();
+    form.append("cid", cid);
+    form.append("ch", ch);
+    form.append("eth_address", currentWallet);
+
+    const res = await API.post("/store-record", form);
+
+    setRecordId(res.data.record_id);
+
+    await sendTx(res.data.tx_data);
+
+    setStep(5);
+  };
+
+  /* LOAD PATIENTS */
+  const loadPatients = async () => {
+    try {
+      const res = await API.get("/patients");
+      setPatients(res.data);
+      setShowPatients(true);
+    } catch (err) {
+      console.log(err);
+      alert("Failed to load patients. Check backend.");
+    }
+  };
+
+  const logout = () => {
+    localStorage.clear();
+    window.location.href = "/";
   };
 
   return (
-    <div className="admin-wrapper">
+    <div>
 
-      <h1>Admin Dashboard</h1>
-
-      <div className="admin-card">
-
-        <h3>Step 1: Choose File</h3>
-        <input type="file" onChange={(e)=>setFile(e.target.files[0])} />
-
-        <h3>Step 2: Encrypt</h3>
-        <button onClick={doEncrypt}>
-          Encrypt File
+      {/* HEADER */}
+      <div className="admin-header">
+        <h1>Admin Dashboard</h1>
+        <button className="logout-btn" onClick={logout}>
+          Logout
         </button>
-
-        <h3>Step 3: Upload</h3>
-        <button onClick={doUpload}>
-          Upload to IPFS
-        </button>
-
-        <h3>Step 4: Hash</h3>
-        <button onClick={doHash}>
-          Generate Hash
-        </button>
-
-        <h3>Step 5: Store</h3>
-        <button onClick={doStore}>
-          Store on Chain
-        </button>
-
-        <hr />
-
-        <p><b>CID:</b> {cid}</p>
-        <p><b>Hash:</b> {ch}</p>
-        <p><b>Record ID:</b> {recordId}</p>
-
       </div>
 
+
+      {/* PATIENT TABLE */}
+      {showPatients && (
+        <div className="patient-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Patient ID</th>
+                <th>Record ID</th>
+                <th>Access</th>
+              </tr>
+            </thead>
+            <tbody>
+              {patients.map((p, i) => (
+                <tr key={i}>
+                  <td>{p.patient_id}</td>
+                  <td>{p.record_id}</td>
+                  <td>
+                    <button>
+                      View Access
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* CENTER CARD */}
+      <div className="center-box">
+
+        {/* ENCRYPT */}
+        {step === 1 && (
+          <div className="box">
+            <h2>Encrypt EHR</h2>
+
+            <input
+              type="file"
+              onChange={(e) => setFile(e.target.files[0])}
+            />
+
+            <button onClick={doEncrypt}>
+              Encrypt
+            </button>
+          </div>
+        )}
+
+        {/* UPLOAD */}
+        {step === 2 && (
+          <div className="box">
+            <h2>Upload to IPFS</h2>
+
+            <button onClick={doUpload}>
+              Upload File
+            </button>
+          </div>
+        )}
+
+        {/* CID SHOW */}
+        {step === 3 && (
+          <div className="box">
+            <h2>File Uploaded</h2>
+
+            <div className="info-block">
+              <label>CID</label>
+              <div className="value-box">
+                {cid}
+              </div>
+            </div>
+
+            <button onClick={doHash}>
+              Compute Chameleon Hash
+            </button>
+          </div>
+        )}
+
+        {/* HASH SHOW */}
+        {step === 4 && (
+          <div className="box">
+            <h2>Hash Generated</h2>
+
+            <div className="info-block">
+              <label>CID</label>
+              <div className="value-box">
+                {cid}
+              </div>
+            </div>
+
+            <div className="info-block">
+              <label>Chameleon Hash</label>
+              <div className="value-box">
+                {ch}
+              </div>
+            </div>
+
+            <button onClick={doStore}>
+              Store on Blockchain
+            </button>
+          </div>
+        )}
+
+        {/* RECORD */}
+        {step === 5 && (
+          <div className="box">
+            <h2>Record Stored Successfully</h2>
+
+            <div className="info-block">
+              <label>Record ID</label>
+              <div className="value-box">
+                {recordId}
+              </div>
+            </div>
+          </div>
+        )}
+
+      </div>
     </div>
   );
 }
