@@ -1,134 +1,125 @@
-/* ===================== GLOBAL ===================== */
-
-.admin-wrapper {
-  min-height: 100vh;
-  background: linear-gradient(135deg, #eef3ff, #f8fbff);
-  font-family: "Segoe UI", sans-serif;
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #f5f7fb;
 }
 
-/* ===================== HEADER ===================== */
-
+/* HEADER */
 .admin-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 18px 35px;
+  text-align: center;
+  border-bottom: 2px solid #ddd;
+  padding: 15px;
+  position: relative;
   background: white;
-  border-bottom: 1px solid #e3ebff;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
 }
 
-.admin-title {
-  font-size: 26px;
-  font-weight: 700;
-  color: #1e3a8a;
+.logout-btn {
+  position: absolute;
+  right: 20px;
+  top: 15px;
+  background: #e74c3c;
+  color: white;
+  border: none;
+  padding: 8px 18px;
+  border-radius: 6px;
+  cursor: pointer;
 }
 
-.admin-wallet {
-  font-size: 14px;
-  color: #555;
-  background: #eef2ff;
-  padding: 6px 12px;
-  border-radius: 8px;
+/* BUTTON AREA */
+.top-buttons {
+  text-align: center;
+  margin-top: 20px;
 }
 
-/* ===================== MAIN ===================== */
+.top-buttons button {
+  padding: 10px 20px;
+  border-radius: 6px;
+  border: none;
+  background: #2c7be5;
+  color: white;
+  cursor: pointer;
+}
 
-.admin-main {
+/* CENTER */
+.center-box {
+  display: flex;
+  justify-content: center;
+  margin-top: 40px;
+}
+
+/* CARD */
+.box {
+  background: white;
   padding: 40px;
+  width: 600px;
+  border-radius: 12px;
+  box-shadow: 0px 5px 15px rgba(0,0,0,0.08);
   text-align: center;
 }
 
-.admin-main h1 {
-  font-size: 32px;
-  color: #1e293b;
-  margin-bottom: 10px;
-}
-
-.admin-subtitle {
-  color: #64748b;
+.box h2 {
   margin-bottom: 30px;
 }
 
-/* ===================== CARD ===================== */
-
-.admin-card {
-  width: 500px;
-  margin: auto;
-  background: white;
-  border-radius: 18px;
-  padding: 30px;
-  box-shadow: 0 10px 25px rgba(0,0,0,0.08);
-  border: 1px solid #e5edff;
+/* INPUT */
+.box input {
+  margin-top: 20px;
 }
 
-/* ===================== STEPS ===================== */
+/* BUTTON */
+.box button {
+  margin-top: 30px;
+  padding: 10px 22px;
+  border-radius: 6px;
+  border: none;
+  background: #2c7be5;
+  color: white;
+  cursor: pointer;
+}
 
-.step {
-  margin-bottom: 25px;
+/* INFO BLOCK */
+.info-block {
+  margin-top: 20px;
   text-align: left;
 }
 
-.step h3 {
-  color: #2563eb;
-  margin-bottom: 8px;
+/* LABEL */
+.info-block label {
+  font-weight: bold;
+  display: block;
+  margin-bottom: 6px;
 }
 
-.step p {
-  font-size: 14px;
-  color: #64748b;
-  margin-bottom: 8px;
-}
-
-/* ===================== INPUT ===================== */
-
-.admin-card input {
-  width: 100%;
-  padding: 10px;
-  border-radius: 8px;
-  border: 1px solid #dbe4ff;
-}
-
-/* ===================== BUTTON ===================== */
-
-.admin-btn {
-  width: 100%;
+/* VALUE */
+.value-box {
+  background: #f4f6fa;
   padding: 12px;
-  border: none;
-  background: #2563eb;
-  color: white;
-  border-radius: 10px;
-  font-size: 15px;
-  cursor: pointer;
-  transition: 0.2s;
-}
+  border-radius: 6px;
+  font-size: 13px;
 
-.admin-btn:hover {
-  background: #1e40af;
-}
-
-/* ===================== DATA BOX ===================== */
-
-.data-box {
-  margin-top: 20px;
-  padding: 15px;
-  background: #f8faff;
-  border-radius: 10px;
-  font-size: 14px;
-  border: 1px solid #e0e7ff;
-}
-
-.data-box p {
-  margin: 5px 0;
   word-wrap: break-word;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
 }
 
-/* ===================== STATUS ===================== */
-
-.status-success {
-  color: green;
+/* TABLE */
+.patient-table {
+  width: 70%;
+  margin: 30px auto;
 }
 
-.status-pending {
-  color: orange;
+.patient-table table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+}
+
+.patient-table th,
+.patient-table td {
+  border: 1px solid #ddd;
+  padding: 12px;
+}
+
+.patient-table th {
+  background: #f0f2f5;
 }
