@@ -4,7 +4,7 @@ import { API } from "../api/api";
 import "../styling/doctor.css";
 import { FaUserCircle, FaEye, FaTimes } from "react-icons/fa";
 import { ethers } from "ethers";
-import { sendTx } from "../pages/TransactionUtils";
+import { sendTx } from "./TransactionUtils";
 import address from "../contractAddress.json";
 
 export function toBytes32(x) {
@@ -22,18 +22,14 @@ export default function Doctor() {
   const [records, setRecords] = useState([]);
   const [showDropdown, setShowDropdown] = useState(false);
 
-  /* ----------------------------------------
-     LOAD DOCTOR REQUESTS
-  ---------------------------------------- */
+  /* ---------------- LOAD DOCTOR REQUESTS ---------------- */
   const loadRecords = async () => {
     try {
-      const res = await API.get(
-        `/requests/doctor?wallet=${doctorAddr}`
-      );
-      console.log("Doctor requests:", res.data);
+      const res = await API.get(`/requests/doctor?wallet=${doctorAddr}`);
       setRecords(res.data || []);
     } catch (e) {
       console.error("Error fetching doctor requests", e);
+      setRecords([]);
     }
   };
 
@@ -41,100 +37,90 @@ export default function Doctor() {
     loadRecords();
   }, []);
 
-  /* ----------------------------------------
-     REQUEST ACCESS (PATIENT_ID BASED)
-  ---------------------------------------- */
+  /* ---------------- REQUEST ACCESS ---------------- */
   const requestAccess = async () => {
-  try {
     if (!patientId) return alert("Enter Patient ID");
 
-    // 1️⃣ Resolve patient + record
-    const resolve = await API.get(`/resolve-patient/${patientId}`);
-    const { patient_address, record_id } = resolve.data;
+    try {
+      // 1️⃣ Resolve patient record and consent
+      const resolve = await API.get(`/resolve-patient/${patientId}`);
+      const { patient_address, record_id, patient_view, consent } = resolve.data;
 
-    const provider = new ethers.BrowserProvider(window.ethereum);
-    const signer = await provider.getSigner();
-    const { chainId } = await provider.getNetwork();
+      if (!consent) return alert("Patient has not given consent yet");
 
-    const role = 0;
-    const nonce = Date.now();
-    const timestamp = Date.now();
-    const ttl = 600;
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const { chainId } = await provider.getNetwork();
 
-    // 2️⃣ Sign REAL values
-    const domain = {
-      name: "AccessRegistry",
-      version: "1",
-      chainId: Number(chainId),
-      verifyingContract: CONTRACT_ADDRESS,
-    };
+      const role = 0;
+      const nonce = Date.now();
+      const timestamp = Date.now();
+      const ttl = 600;
 
-    const types = {
-      AccessRequest: [
-        { name: "provider", type: "address" },
-        { name: "patient", type: "address" },
-        { name: "recordId", type: "bytes32" },
-        { name: "role", type: "uint8" },
-        { name: "timestamp", type: "uint64" },
-        { name: "nonce", type: "uint256" },
-      ],
-    };
+      const domain = {
+        name: "AccessRegistry",
+        version: "1",
+        chainId: Number(chainId),
+        verifyingContract: CONTRACT_ADDRESS,
+      };
 
-    const message = {
-      provider: doctorAddr,
-      patient: patient_address,
-      recordId: toBytes32(record_id),
-      role,
-      timestamp,
-      nonce,
-    };
+      const types = {
+        AccessRequest: [
+          { name: "provider", type: "address" },
+          { name: "patient", type: "address" },
+          { name: "recordId", type: "bytes32" },
+          { name: "role", type: "uint8" },
+          { name: "timestamp", type: "uint64" },
+          { name: "nonce", type: "uint256" },
+        ],
+      };
 
-    alert("Sign request (no gas)");
+      const message = {
+        provider: doctorAddr,
+        patient: patient_address,
+        recordId: toBytes32(record_id),
+        role,
+        timestamp,
+        nonce,
+      };
 
-    const signature = await signer.signTypedData(domain, types, message);
-    const sig = ethers.Signature.from(signature);
+      alert("Sign access request (no gas)");
 
-    // 3️⃣ Send to backend
-    const form = new FormData();
-    form.append("doctor_address", doctorAddr);
-    form.append("patient_id", patientId);
-    form.append("record_id", record_id);
-    form.append("role", role);
-    form.append("timestamp", timestamp);
-    form.append("nonce", nonce);
-    form.append("sig_v", sig.v);
-    form.append("sig_r", sig.r);
-    form.append("sig_s", sig.s);
-    form.append("ttl", ttl);
+      const signature = await signer.signTypedData(domain, types, message);
+      const sig = ethers.Signature.from(signature);
 
-    const backend = await API.post("/access-request", form);
-    const txData = backend.data.tx_data;
+      // 2️⃣ Send to backend
+      const form = new FormData();
+      form.append("doctor_address", doctorAddr);
+      form.append("patient_id", patientId);
+      form.append("record_id", record_id);
+      form.append("role", role);
+      form.append("timestamp", timestamp);
+      form.append("nonce", nonce);
+      form.append("sig_v", sig.v);
+      form.append("sig_r", sig.r);
+      form.append("sig_s", sig.s);
+      form.append("ttl", ttl);
 
-    alert("Confirm blockchain tx (gas required)");
-    await sendTx(txData);
+      const backend = await API.post("/access-request", form);
+      const txData = backend.data.tx_data;
 
-    alert("✅ Access request submitted");
-    loadRecords();
-  } catch (e) {
-    console.error(e);
-    alert("❌ Access request failed");
-  }
-};
+      alert("Confirm blockchain tx (gas required)");
+      await sendTx(txData);
 
+      alert("✅ Access request submitted");
+      loadRecords();
+    } catch (e) {
+      console.error(e);
+      alert("❌ Access request failed");
+    }
+  };
 
-  /* ----------------------------------------
-     VIEW EHR
-  ---------------------------------------- */
+  /* ---------------- VIEW EHR ---------------- */
   const viewEHR = async (record_id, token) => {
     try {
-      const res = await API.get(`/view/${record_id}`, {
-        params: { token },
-        responseType: "blob",
-      });
-
-      const url = URL.createObjectURL(
-        new Blob([res.data], { type: "application/pdf" })
-      );
+      const res = await API.get(`/view/${record_id}`, { params: { token }, responseType: "blob" });
+      const url = URL.createObjectURL(new Blob([res.data], { type: "application/pdf" }));
       window.open(url, "_blank");
       setTimeout(() => URL.revokeObjectURL(url), 5000);
     } catch {
@@ -142,21 +128,16 @@ export default function Doctor() {
     }
   };
 
-  /* ----------------------------------------
-     UI HELPERS
-  ---------------------------------------- */
+  /* ---------------- UI HELPERS ---------------- */
   const toggleDropdown = () => setShowDropdown((p) => !p);
   const handleLogout = () => {
     localStorage.clear();
     window.location.href = "/";
   };
 
-  /* ----------------------------------------
-     RENDER
-  ---------------------------------------- */
   return (
-    <div className="patient-wrapper">
-      <header className="patient-header">
+    <div className="doctor-wrapper">
+      <header className="doctor-header">
         <h2 className="app-name">EHRChain</h2>
 
         <div className="user-info" onClick={toggleDropdown}>
@@ -171,7 +152,7 @@ export default function Doctor() {
         )}
       </header>
 
-      <div className="patient-main">
+      <div className="doctor-main">
         <h1>Welcome, Dr. {doctorName}</h1>
         <p>Request access to a patient’s EHR securely.</p>
 
@@ -195,7 +176,7 @@ export default function Doctor() {
         {records.length === 0 ? (
           <p className="no-data">No requests yet ⏳</p>
         ) : (
-          <table className="styled-table">
+          <table className="records-table">
             <thead>
               <tr>
                 <th>Patient ID</th>
@@ -210,8 +191,7 @@ export default function Doctor() {
                   <td>{r.patient_id}</td>
                   <td
                     style={{
-                      color:
-                        r.status === "approved" ? "#21a021" : "#cc7a00",
+                      color: r.status === "approved" ? "#21a021" : "#cc7a00",
                       fontWeight: 600,
                       textTransform: "capitalize",
                     }}
@@ -226,11 +206,8 @@ export default function Doctor() {
                       />
                     )}
                     {r.status === "expired" && (
-    <FaTimes
-      style={{ color: "#cc0000", cursor: "not-allowed" }}
-      title="Access expired"
-    />
-  )}
+                      <FaTimes style={{ color: "#cc0000", cursor: "not-allowed" }} />
+                    )}
                   </td>
                 </tr>
               ))}
