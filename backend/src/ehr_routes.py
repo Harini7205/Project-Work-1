@@ -442,3 +442,28 @@ def resolve_patient(patient_id: str):
         "patient_address": patient_address,
         "record_id": record_id
     }
+    
+# ======================================================
+# GET ALL PATIENTS (ADMIN)
+# ======================================================
+@router.get("/patients")
+def get_patients():
+    db = get_db()
+
+    rows = db.execute("""
+        SELECT patient_id, wallet
+        FROM users
+        WHERE role='patient'
+    """).fetchall()
+
+    patients = []
+
+    for r in rows:
+        patients.append({
+            "patient_id": r[0],
+            "consent": "Unknown",
+            "doctor_access": "Unknown"
+        })
+
+    return patients
+    
