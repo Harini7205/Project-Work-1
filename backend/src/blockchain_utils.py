@@ -250,3 +250,23 @@ def is_identity_registered(user: str) -> bool:
     return contract.functions.isRegistered(
         Web3.to_checksum_address(user)
     ).call()
+
+def get_patient_pubkey(wallet: str):
+    """
+    Fetch patient public key from AccessRegistry contract.
+    Returns pubkey bytes or None.
+    """
+    contract = _load_contract()
+    wallet = Web3.to_checksum_address(wallet)
+
+    identity = contract.functions.identities(wallet).call()
+
+    # identity = (idHash, pubKey, exists)
+    id_hash = identity[0]
+    pub_key = identity[1]
+    exists = identity[2]
+
+    if not exists or not pub_key:
+        return None
+
+    return pub_key

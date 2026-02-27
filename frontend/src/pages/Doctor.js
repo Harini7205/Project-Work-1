@@ -39,83 +39,47 @@ export default function Doctor() {
 
   /* ---------------- REQUEST ACCESS ---------------- */
   const requestAccess = async () => {
-    if (!patientId) return alert("Enter Patient ID");
+  if (!patientId) return alert("Enter Patient ID");
 
-    try {
-      // 1️⃣ Resolve patient record and consent
-      const resolve = await API.get(`/resolve-patient/${patientId}`);
-      const { patient_address, record_id, patient_view, consent } = resolve.data;
+  try {
+    // 1️⃣ Resolve patient wallet + record
+    const resolve = await API.get(`/resolve-patient/${patientId}`);
+    const { patient_address, record_id } = resolve.data;
 
-      if (!consent) return alert("Patient has not given consent yet");
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    const signer = await provider.getSigner();
 
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
-      const { chainId } = await provider.getNetwork();
+    const role = 0;
+    const nonce = Date.now();
+    const timestamp = Date.now();
+    const ttl = 600;
 
-      const role = 0;
-      const nonce = Date.now();
-      const timestamp = Date.now();
-      const ttl = 600;
+    // 2️⃣ Prepare backend request
+    const form = new FormData();
+    form.append("doctor_address", doctorAddr);
+    form.append("patient_id", patientId);
+    form.append("role", role);
+    form.append("timestamp", timestamp);
+    form.append("nonce", nonce);
+    form.append("sig_v", 0);
+    form.append("sig_r", ethers.ZeroHash);
+    form.append("sig_s", ethers.ZeroHash);
+    form.append("ttl", ttl);
 
-      const domain = {
-        name: "AccessRegistry",
-        version: "1",
-        chainId: Number(chainId),
-        verifyingContract: CONTRACT_ADDRESS,
-      };
+    const backend = await API.post("/access-request", form);
+    const txData = backend.data.tx_data;
 
-      const types = {
-        AccessRequest: [
-          { name: "provider", type: "address" },
-          { name: "patient", type: "address" },
-          { name: "recordId", type: "bytes32" },
-          { name: "role", type: "uint8" },
-          { name: "timestamp", type: "uint64" },
-          { name: "nonce", type: "uint256" },
-        ],
-      };
+    // 3️⃣ Sign actual blockchain tx (this is what matters)
+    await sendTx(txData);
 
-      const message = {
-        provider: doctorAddr,
-        patient: patient_address,
-        recordId: toBytes32(record_id),
-        role,
-        timestamp,
-        nonce,
-      };
+    alert("✅ Access request submitted");
+    loadRecords();
 
-      alert("Sign access request (no gas)");
-
-      const signature = await signer.signTypedData(domain, types, message);
-      const sig = ethers.Signature.from(signature);
-
-      // 2️⃣ Send to backend
-      const form = new FormData();
-      form.append("doctor_address", doctorAddr);
-      form.append("patient_id", patientId);
-      form.append("record_id", record_id);
-      form.append("role", role);
-      form.append("timestamp", timestamp);
-      form.append("nonce", nonce);
-      form.append("sig_v", sig.v);
-      form.append("sig_r", sig.r);
-      form.append("sig_s", sig.s);
-      form.append("ttl", ttl);
-
-      const backend = await API.post("/access-request", form);
-      const txData = backend.data.tx_data;
-
-      alert("Confirm blockchain tx (gas required)");
-      await sendTx(txData);
-
-      alert("✅ Access request submitted");
-      loadRecords();
-    } catch (e) {
-      console.error(e);
-      alert("❌ Access request failed");
-    }
-  };
-
+  } catch (e) {
+    console.error(e);
+    alert("❌ Access request failed");
+  }
+};
   /* ---------------- VIEW EHR ---------------- */
   const viewEHR = async (record_id, token) => {
     try {

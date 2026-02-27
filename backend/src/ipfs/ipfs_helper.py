@@ -4,19 +4,16 @@ from .aes_gcm import encrypt_bytes, decrypt_bytes   # updated AES helpers (see b
 
 
 def upload_to_ipfs_bytes(raw_bytes: bytes, ipfs_api="http://127.0.0.1:5001/api/v0/add") -> str:
-    """
-    Encrypt the incoming bytes in-memory and upload to IPFS.
-    Returns CID.
-    """
+    files = {
+        "file": ("file.bin", raw_bytes)
+    }
 
-    files = {"file": (raw_bytes)}
     resp = requests.post(ipfs_api, files=files, timeout=60)
 
     if resp.status_code == 200:
         return resp.json()["Hash"]
     else:
         raise Exception(f"IPFS upload failed: {resp.status_code} {resp.text}")
-
 
 def download_from_ipfs_bytes(cid: str, ipfs_gateway="http://127.0.0.1:8080/ipfs/") -> bytes:
     """

@@ -1,3 +1,5 @@
+import json
+
 from fastapi import APIRouter, UploadFile, Form, HTTPException
 from fastapi.responses import StreamingResponse
 from web3 import Web3
@@ -22,7 +24,8 @@ from blockchain_utils import (
     fetch_access_logs_for_doctor,
     check_token_valid,
     toggle_consent_tx,
-    is_identity_registered
+    is_identity_registered,
+    get_patient_pubkey
 )
 from dotenv import load_dotenv
 import os
@@ -220,22 +223,95 @@ async def upload_ipfs(file: UploadFile):
     return {"cid": cid}
 
 @router.post("/chameleon-hash/{cid}")
-def compute_ch(cid: str, public_key_hex: str = Form(...)):
-    msg = encode_message(cid, True, bytes.fromhex(public_key_hex))
-    r = _rand_scalar()
-    ch_hex, _ = ch_hash(msg, r, bytes.fromhex(public_key_hex))
-    return {"ch": ch_hex, "r": hex(r)}
+def compute_ch(
+    cid: str,
+    patient_id: str = Form(...)
+):
+    db = get_db()
 
-@router.post("/store-record")
-def store_record_endpoint(
+    # 1️⃣ Resolve wallet
+    row = db.execute(
+        "SELECT wallet FROM users WHERE patient_id=? AND role='patient'",
+        (patient_id,)
+    ).fetchone()
+
+    if not row:
+        raise HTTPException(404, "Patient not found")
+
+    patient_wallet = Web3.to_checksum_address(row[0])
+
+    # 2️⃣ Fetch pubkey from blockchain
+    pub_bytes = get_patient_pubkey(patient_wallet)
+
+    if not pub_bytes:
+        raise HTTPException(
+            400,
+            "Patient identity not registered on-chain"
+        )
+
+    # 3️⃣ Compute chameleon hash
+    msg = encode_message(cid, True, pub_bytes)
+    r = _rand_scalar()
+    ch_hex, _ = ch_hash(msg, r, pub_bytes)
+
+    return {
+        "ch": ch_hex,
+        "r": hex(r)
+    }
+
+@router.post("/admin/prepare-record")
+def prepare_record(
+    patient_id: str = Form(...),
     cid: str = Form(...),
     ch: str = Form(...),
-    eth_address: str = Form(...)
+    admin_wallet: str = Form(...)
 ):
-    record_id = Web3.keccak(text=cid + eth_address).hex()
-    tx_data = store_record(eth_address, record_id, ch, cid, True)
+    db = get_db()
 
-    return {"record_id": record_id, "tx_data": tx_data}
+    # 1️⃣ Resolve patient wallet
+    row = db.execute(
+        "SELECT wallet FROM users WHERE patient_id=? AND role='patient'",
+        (patient_id,)
+    ).fetchone()
+
+    if not row:
+        raise HTTPException(404, "Patient not found")
+
+    patient_wallet = row[0]
+
+    # 2️⃣ Deterministic record_id
+    record_id = Web3.keccak(text=cid + patient_wallet).hex()
+
+    # 3️⃣ Build tx (DO NOT EXECUTE)
+    tx_data = store_record(
+        patient_wallet,
+        record_id,
+        ch,
+        cid,
+        True
+    )
+
+    # 4️⃣ Store pending record
+    db.execute("""
+        INSERT INTO pending_records
+        (patient_id, admin_wallet, cid, ch, record_id, tx_data, created_at)
+        VALUES (?,?,?,?,?,?,?)
+    """, (
+        patient_id,
+        admin_wallet.lower(),
+        cid,
+        ch,
+        record_id,
+        json.dumps(tx_data),
+        int(time.time())
+    ))
+
+    db.commit()
+
+    return {
+        "message": "Pending record created",
+        "record_id": record_id
+    }
 
 @router.post("/redact")
 def redact_ehr(
@@ -438,9 +514,19 @@ def resolve_patient(patient_id: str):
     if not record_id or int(record_id, 16) == 0:
         raise HTTPException(404, "No record found")
 
+    consent = False
+    cid = None
+
+    if record_id:
+        rec = get_record_by_id(record_id)
+        consent = rec["consent"]
+        cid = rec["encryptedCid"]
+
     return {
-        "patient_address": patient_address,
-        "record_id": record_id
+        "patient_id": patient_id,
+        "record_id": record_id,
+        "consent": consent,
+        "cid": cid
     }
     
 # ======================================================
@@ -467,3 +553,93 @@ def get_patients():
 
     return patients
     
+@router.get("/patient-profile")
+def patient_profile(email: str):
+    db = get_db()
+
+    row = db.execute(
+        "SELECT patient_id, wallet FROM users WHERE email=? AND role='patient'",
+        (email,)
+    ).fetchone()
+
+    if not row:
+        raise HTTPException(404, "Patient not found")
+
+    patient_id, wallet = row
+
+    record_id = get_record_id_by_owner(wallet)
+
+    consent = False
+    cid = None
+
+    if record_id:
+        rec = get_record_by_id(record_id)
+        consent = rec["consent"]
+        cid = rec["encryptedCid"]
+
+    return {
+        "patient_id": patient_id,
+        "record_id": record_id,
+        "consent": consent,
+        "cid": cid
+    }
+
+@router.get("/patient/pending")
+def get_pending_records(email: str):
+    db = get_db()
+
+    row = db.execute(
+        "SELECT patient_id FROM users WHERE email=? AND role='patient'",
+        (email,)
+    ).fetchone()
+
+    if not row:
+        raise HTTPException(404, "Patient not found")
+
+    patient_id = row[0]
+
+    records = db.execute("""
+        SELECT id, admin_wallet, cid, record_id, tx_data
+        FROM pending_records
+        WHERE patient_id=? AND status='pending'
+    """, (patient_id,)).fetchall()
+
+    result = []
+
+    for r in records:
+        result.append({
+            "pending_id": r[0],
+            "admin_wallet": r[1],
+            "cid": r[2],
+            "record_id": r[3],
+            "tx_data": json.loads(r[4])
+        })
+
+    return result
+
+@router.post("/patient/approve-record")
+def approve_record(
+    pending_id: int = Form(...)
+):
+    db = get_db()
+
+    row = db.execute("""
+        SELECT status FROM pending_records
+        WHERE id=?
+    """, (pending_id,)).fetchone()
+
+    if not row:
+        raise HTTPException(404, "Pending record not found")
+
+    if row[0] != "pending":
+        raise HTTPException(400, "Already processed")
+
+    db.execute("""
+        UPDATE pending_records
+        SET status='approved'
+        WHERE id=?
+    """, (pending_id,))
+
+    db.commit()
+
+    return {"message": "Marked approved"}

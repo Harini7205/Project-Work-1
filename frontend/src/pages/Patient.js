@@ -4,98 +4,202 @@ import "../styling/patient.css";
 import { sendTx } from "./TransactionUtils";
 
 export default function Patient() {
-  const name = localStorage.getItem("name");
+
+  const email = localStorage.getItem("email");
   const wallet = localStorage.getItem("wallet");
 
   const [patientId, setPatientId] = useState("");
   const [consent, setConsent] = useState(false);
-  const [viewEHREnabled, setViewEHREnabled] = useState(false);
   const [recordId, setRecordId] = useState("");
   const [cid, setCid] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [pending, setPending] = useState([]);
 
-  /* LOAD PATIENT STATUS FROM BACKEND */
-  const loadPatientStatus = async () => {
-    if (!patientId) return;
+  /* ===============================
+     LOAD PATIENT PROFILE
+  =============================== */
+  const loadPatientData = async () => {
     try {
-      const res = await API.get(`/patient-status/${patientId}`);
+      const res = await API.get(`/patient-profile?email=${email}`);
       const data = res.data;
+
+      setPatientId(data.patient_id);
       setConsent(data.consent);
-      setViewEHREnabled(data.view_ehr);
       setRecordId(data.record_id);
       setCid(data.cid);
-    } catch {
-      alert("Failed to load patient status");
+    } catch (err) {
+      console.error(err);
+      alert("Failed to load patient data");
+    }
+  };
+
+  /* ===============================
+     LOAD PENDING RECORDS
+  =============================== */
+  const loadPending = async () => {
+    try {
+      const res = await API.get(`/patient/pending?email=${email}`);
+      setPending(res.data);
+    } catch (err) {
+      console.error(err);
     }
   };
 
   useEffect(() => {
-    if (patientId) loadPatientStatus();
-  }, [patientId]);
+    const init = async () => {
+      await loadPatientData();
+      await loadPending();
+      setLoading(false);
+    };
 
-  /* GIVE CONSENT */
-  const giveConsent = async () => {
-    if (!patientId) return alert("Enter your Patient ID");
+    init();
+  }, []);
+
+  /* ===============================
+     APPROVE RECORD (SIGN TX)
+  =============================== */
+  const approveRecord = async (p) => {
     try {
-      const form = new FormData();
-      form.append("patient_id", patientId);
-      form.append("eth_address", wallet);
-      form.append("active", true);
+      // 1️⃣ Sign blockchain transaction
+      await sendTx(p.tx_data);
 
-      await API.post("/give-consent", form);
-      alert("Consent Given!");
-      setConsent(true);
-    } catch {
-      alert("Failed to give consent");
+      // 2️⃣ Notify backend
+      const form = new FormData();
+      form.append("pending_id", p.pending_id);
+
+      await API.post("/patient/approve-record", form);
+
+      alert("Record stored successfully");
+
+      // 3️⃣ Reload everything
+      await loadPending();
+      await loadPatientData();
+
+    } catch (err) {
+      console.error(err);
+      alert("Transaction failed");
     }
   };
 
-  /* VIEW EHR */
+  /* ===============================
+     TOGGLE CONSENT (ON-CHAIN)
+  =============================== */
+  const toggleConsent = async () => {
+    try {
+      const form = new FormData();
+      form.append("record_id", recordId);
+      form.append("eth_address", wallet);
+      form.append("active", !consent);
+
+      const res = await API.post("/toggle-consent", form);
+
+      // Sign blockchain tx
+      await sendTx(res.data.tx_data);
+
+      setConsent(!consent);
+
+    } catch (err) {
+      console.error(err);
+      alert("Failed to update consent");
+    }
+  };
+
+  /* ===============================
+     VIEW EHR
+  =============================== */
   const viewEHR = async () => {
-    if (!cid) return alert("No EHR available yet");
+    if (!cid) return alert("No EHR uploaded yet");
+
     try {
       const res = await API.get(`/download/${cid}`, {
         responseType: "blob",
       });
+
       const url = URL.createObjectURL(new Blob([res.data]));
       window.open(url);
-    } catch {
-      alert("Failed to view EHR");
+    } catch (err) {
+      console.error(err);
+      alert("Unable to fetch EHR");
     }
   };
 
+  if (loading) {
+    return <div className="patient-wrapper">Loading...</div>;
+  }
+
   return (
     <div className="patient-wrapper">
-      <h1>Welcome, {name}</h1>
+      <h1>Patient Dashboard</h1>
 
       <div className="patient-card">
-        <input
-          placeholder="Enter your Patient ID"
-          value={patientId}
-          onChange={(e) => setPatientId(e.target.value)}
-        />
-        <button onClick={loadPatientStatus}>Load My Status</button>
+
+        {/* PATIENT ID */}
+        <div className="info-row">
+          <label>Patient ID</label>
+          <div className="info-value">{patientId}</div>
+        </div>
 
         <hr />
 
-        <h3>Consent</h3>
-        <button
-          disabled={consent}
-          onClick={giveConsent}
-          className={consent ? "btn-disabled" : "btn-enabled"}
-        >
-          {consent ? "Consent Given" : "Give Consent"}
-        </button>
+        {/* PENDING RECORDS */}
+        {pending.length > 0 && (
+          <>
+            <h3>Pending Records</h3>
+            {pending.map((p) => (
+              <div key={p.pending_id} className="pending-card">
+                <p>
+                  New EHR uploaded by: {p.admin_wallet}
+                </p>
+                <button
+                  className="btn-enabled"
+                  onClick={() => approveRecord(p)}
+                >
+                  Approve & Store On Blockchain
+                </button>
+              </div>
+            ))}
+            <hr />
+          </>
+        )}
+
+        {pending.length === 0 && (
+          <div className="no-pending">
+            No pending records
+          </div>
+        )}
+
+        {/* CONSENT TOGGLE */}
+        <div className="info-row">
+          <label>Consent Status</label>
+
+          <label className="switch">
+            <input
+              type="checkbox"
+              checked={consent}
+              onChange={toggleConsent}
+              disabled={!recordId}
+            />
+            <span className="slider"></span>
+          </label>
+
+          <span className={consent ? "status-active" : "status-inactive"}>
+            {consent ? "Active" : "Inactive"}
+          </span>
+        </div>
 
         <hr />
 
-        <h3>View EHR</h3>
-        <button
-          disabled={!viewEHREnabled}
-          onClick={viewEHR}
-          className={viewEHREnabled ? "btn-enabled" : "btn-disabled"}
-        >
-          {viewEHREnabled ? "View EHR" : "Access Disabled"}
-        </button>
+        {/* VIEW EHR */}
+        <div className="info-row">
+          <button
+            disabled={!cid}
+            onClick={viewEHR}
+            className={cid ? "btn-enabled" : "btn-disabled"}
+          >
+            {cid ? "View My EHR" : "No Record Uploaded"}
+          </button>
+        </div>
+
       </div>
     </div>
   );
