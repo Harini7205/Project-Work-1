@@ -8,7 +8,7 @@ from email.message import EmailMessage
 
 # -------------------- IPFS + CRYPTO --------------------
 from ipfs.ipfs_helper import upload_to_ipfs_bytes, download_from_ipfs_bytes as download_from_ipfs
-from ipfs.aes_gcm import encrypt_bytes
+from ipfs.aes_gcm import encrypt_bytes, decrypt_bytes
 from chameleon_hash.ch_secp256k1 import encode_message, ch_hash, _rand_scalar, forge_r
 from key_generation.ecc import generate_ecc_key_pair
 
@@ -271,7 +271,7 @@ def prepare_record(
     # 1️⃣ Resolve patient wallet
     row = db.execute(
         "SELECT wallet FROM users WHERE patient_id=? AND role='patient'",
-        (patient_id,)
+        (patient_id,),
     ).fetchone()
 
     if not row:
@@ -291,20 +291,27 @@ def prepare_record(
         True
     )
 
+    # ✅ Remove nonce if exists (MetaMask will handle it)
+    if "nonce" in tx_data:
+        del tx_data["nonce"]
+
     # 4️⃣ Store pending record
-    db.execute("""
+    db.execute(
+        """
         INSERT INTO pending_records
         (patient_id, admin_wallet, cid, ch, record_id, tx_data, created_at)
         VALUES (?,?,?,?,?,?,?)
-    """, (
-        patient_id,
-        admin_wallet.lower(),
-        cid,
-        ch,
-        record_id,
-        json.dumps(tx_data),
-        int(time.time())
-    ))
+        """,
+        (
+            patient_id,
+            admin_wallet.lower(),
+            cid,
+            ch,
+            record_id,
+            json.dumps(tx_data),
+            int(time.time()),
+        ),
+    )
 
     db.commit()
 
@@ -643,3 +650,30 @@ def approve_record(
     db.commit()
 
     return {"message": "Marked approved"}
+
+from fastapi.responses import Response
+from ipfs.aes_gcm import decrypt_bytes
+
+@router.get("/download/{cid}")
+async def download_ehr(cid: str):
+
+    try:
+        encrypted_bytes = download_from_ipfs(cid)
+
+        print("Encrypted first bytes:", encrypted_bytes[:20])
+
+        decrypted_bytes = decrypt_bytes(encrypted_bytes)
+
+        print("Decrypted first bytes:", decrypted_bytes[:20])
+
+        return Response(
+            content=decrypted_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": "inline; filename=ehr.pdf"
+            }
+        )
+
+    except Exception as e:
+        print("DECRYPT ERROR:", e)
+        raise HTTPException(500, "Decryption failed")
