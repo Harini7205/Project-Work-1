@@ -1,0 +1,60 @@
+# (optional) remove version line — it's obsolete
+
+networks:
+  ehr_net:
+    name: ehr_net
+
+services:
+
+  hospitala:
+    build: ./hospital-node
+    container_name: hospitala
+    environment:
+      - HOSPITAL_ID=hospitala
+      - PORT=8000
+      - WORKLOAD_INTENSITY=0.55
+    ports:
+      - "8001:8000"
+    networks:
+      - ehr_net
+    restart: unless-stopped
+
+  hospitalb:
+    build: ./hospital-node
+    container_name: hospitalb
+    environment:
+      - HOSPITAL_ID=hospitalb
+      - PORT=8000
+      - WORKLOAD_INTENSITY=0.15
+    ports:
+      - "8002:8000"
+    networks:
+      - ehr_net
+    restart: unless-stopped
+
+
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: prometheus
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    networks:
+      - ehr_net
+    depends_on:
+      - hospitala
+      - hospitalb
+    restart: unless-stopped
+
+  ai-agent:
+    build: ./ai-agent
+    container_name: ai-agent
+    environment:
+      - PROMETHEUS_URL=http://prometheus:9090
+      - ELECTION_INTERVAL=30
+    networks:
+      - ehr_net
+    depends_on:
+      - prometheus
+    restart: unless-stopped
