@@ -1,0 +1,10 @@
+global:
+  scrape_interval: 10s
+
+scrape_configs:
+  - job_name: hospital_nodes
+    static_configs:
+      - targets:
+          - hospitala:8000
+          - hospitalb:8000
+    metrics_path: /metrics
