@@ -1,5 +1,0 @@
-flask==3.0.3
-psutil
-torch
-numpy
-requests
